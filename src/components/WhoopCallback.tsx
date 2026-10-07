@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { finishConnect, syncWhoop } from '../lib/whoop';
 import { CheckIcon } from './icons';
 
-/** Сюда WHOOP возвращает после входа: меняем код на токены и подтягиваем данные */
+/** Сюда WHOOP возвращает после входа — в любом окне и любом браузере */
 export function WhoopCallback() {
-  const [state, setState] = useState<'working' | 'ok' | 'error'>('working');
+  const [state, setState] = useState<'working' | 'connected' | 'handed' | 'error'>('working');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -12,15 +12,19 @@ export function WhoopCallback() {
     history.replaceState(null, '', '/whoop/callback');
     (async () => {
       try {
-        await finishConnect(params);
-        setState('ok');
-        await syncWhoop(true).catch(() => undefined);
+        const here = await finishConnect(params);
+        if (here) {
+          setState('connected');
+          await syncWhoop(true).catch(() => undefined);
+          if (window.opener) setTimeout(() => window.close(), 1200);
+        } else {
+          setState('handed');
+        }
         try {
-          new BroadcastChannel('femfora').postMessage('whoop-connected');
+          new BroadcastChannel('femfora').postMessage('whoop-ready');
         } catch {
           /* не критично */
         }
-        if (window.opener) setTimeout(() => window.close(), 1200);
       } catch (e) {
         setError((e as Error).message);
         setState('error');
@@ -36,14 +40,16 @@ export function WhoopCallback() {
   return (
     <div className="screen" style={{ minHeight: '100dvh', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 16 }}>
       {state === 'working' && <h2>Подключаю WHOOP…</h2>}
-      {state === 'ok' && (
+      {(state === 'connected' || state === 'handed') && (
         <>
           <span style={{ width: 56, height: 56, borderRadius: 28, background: 'var(--soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <CheckIcon size={26} style={{ color: 'var(--accent-text)' }} />
           </span>
-          <h2>WHOOP подключён</h2>
-          <span className="sub" style={{ fontWeight: 500 }}>
-            Данные подтягиваются в FemFora
+          <h2>{state === 'connected' ? 'WHOOP подключён' : 'Вход в WHOOP выполнен'}</h2>
+          <span className="sub" style={{ fontWeight: 500, lineHeight: 1.45, maxWidth: 320 }}>
+            {state === 'connected'
+              ? 'Данные подтягиваются в FemFora'
+              : 'Это окно можно закрыть. Вернись в FemFora с иконки на экране «Домой»: подключение завершится само в течение 15 минут.'}
           </span>
         </>
       )}
@@ -51,13 +57,11 @@ export function WhoopCallback() {
         <>
           <h2>Не получилось подключить WHOOP</h2>
           <span className="sub" style={{ fontWeight: 500, lineHeight: 1.45, maxWidth: 320 }}>
-            {error === 'STATE'
-              ? 'Подключение открылось не в том окне. Открой FemFora с иконки на экране «Домой» и нажми «Подключить» ещё раз.'
-              : error}
+            {error}
           </span>
         </>
       )}
-      {state !== 'working' && (
+      {state !== 'working' && state !== 'handed' && (
         <button className="btn btn-primary" style={{ minWidth: 220 }} onClick={back}>
           Вернуться в FemFora
         </button>

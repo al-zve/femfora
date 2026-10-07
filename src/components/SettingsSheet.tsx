@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
 import { db } from '../db';
-import { disconnectWhoop, startConnect, syncWhoop } from '../lib/whoop';
+import { cancelConnect, disconnectWhoop, startConnect, syncWhoop } from '../lib/whoop';
 import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
 import { Sheet } from './Sheet';
@@ -19,6 +19,9 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const whoopAuth = useLiveQuery(() => db.settings.get('whoop_auth'));
   const whoopSync = useLiveQuery(() => db.settings.get('whoop_sync'));
   const whoopError = useLiveQuery(() => db.settings.get('whoop_error'));
+  const whoopPending = (useLiveQuery(() => db.settings.get('whoop_pending'))?.value as { url: string; at: number } | undefined) ?? null;
+  const pendingFresh = whoopPending && Date.now() - whoopPending.at < 15 * 60_000 ? whoopPending : null;
+  const [copied, setCopied] = useState(false);
   const [whoopMsg, setWhoopMsg] = useState('');
   const syncedAt = (whoopSync?.value as { at: number } | undefined)?.at;
 
@@ -121,12 +124,42 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
                       Отключить
                     </button>
                   </span>
+                ) : pendingFresh ? (
+                  <span className="caption" style={{ fontWeight: 600 }}>
+                    ждём вход…
+                  </span>
                 ) : (
                   <button className="btn-text" onClick={connect}>
                     Подключить
                   </button>
                 )}
               </div>
+              {!whoopAuth && pendingFresh && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0 14px', borderBottom: '1px solid var(--line)' }}>
+                  <span className="sub" style={{ fontWeight: 500, lineHeight: 1.45 }}>
+                    Войди в WHOOP в открывшемся окне и разреши доступ. Если окно зависло, открой ссылку в Safari или на компьютере: подключение всё равно придёт сюда.
+                  </span>
+                  <div className="grid2">
+                    <button className="btn btn-secondary" style={{ height: 44, fontSize: 15 }} onClick={() => window.open(pendingFresh.url, '_blank')}>
+                      Открыть вход
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ height: 44, fontSize: 15 }}
+                      onClick={async () => {
+                        await navigator.clipboard?.writeText(pendingFresh.url).catch(() => undefined);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                    >
+                      {copied ? 'Скопировано' : 'Скопировать ссылку'}
+                    </button>
+                  </div>
+                  <button className="btn-text" style={{ color: 'var(--muted)', alignSelf: 'flex-start' }} onClick={() => cancelConnect()}>
+                    Отменить
+                  </button>
+                </div>
+              )}
               <div className="list-row">
                 Google Календарь <span className="val">скоро</span>
               </div>

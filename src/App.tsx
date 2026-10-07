@@ -10,7 +10,7 @@ import { TaskSheet } from './components/TaskSheet';
 import { SettingsSheet, type ThemePref } from './components/SettingsSheet';
 import { CheckIcon, PlusIcon } from './components/icons';
 import { WhoopCallback } from './components/WhoopCallback';
-import { syncWhoop } from './lib/whoop';
+import { claimPending, getPending, syncWhoop } from './lib/whoop';
 
 type Tab = 'today' | 'tasks' | 'health';
 type SheetState = { kind: 'add' } | { kind: 'task'; id: string } | { kind: 'settings' } | null;
@@ -46,22 +46,46 @@ function useTheme(): ThemePref {
 }
 
 function useWhoopSync() {
+  const pending = useLiveQuery(() => db.settings.get('whoop_pending'));
+  const hasPending = !!pending;
+
   useEffect(() => {
     const run = () => document.visibilityState === 'visible' && syncWhoop().catch(() => undefined);
     run();
     document.addEventListener('visibilitychange', run);
+    return () => document.removeEventListener('visibilitychange', run);
+  }, []);
+
+  // пока идёт вход в WHOOP, каждые 3 секунды спрашиваем сервер, готов ли результат
+  useEffect(() => {
+    if (!hasPending) return;
+    let stop = false;
+    const tick = async () => {
+      if (stop || document.visibilityState !== 'visible') return;
+      try {
+        if (!(await getPending())) return;
+        if (await claimPending()) await syncWhoop(true);
+      } catch {
+        /* попробуем на следующем шаге */
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 3000);
+    document.addEventListener('visibilitychange', tick);
     let ch: BroadcastChannel | null = null;
     try {
       ch = new BroadcastChannel('femfora');
-      ch.onmessage = (e) => e.data === 'whoop-connected' && syncWhoop(true).catch(() => undefined);
+      ch.onmessage = () => tick();
     } catch {
       /* старые браузеры */
     }
     return () => {
-      document.removeEventListener('visibilitychange', run);
+      stop = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
       ch?.close();
     };
-  }, []);
+  }, [hasPending]);
 }
 
 export default function App() {

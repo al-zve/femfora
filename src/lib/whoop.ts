@@ -17,25 +17,63 @@ function randomState() {
   return Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => abc[x % abc.length]).join('');
 }
 
+type Pending = { state: string; privateKey: CryptoKey; url: string; at: number };
+const PENDING_TTL = 15 * 60_000;
+
+export const getPending = async () => {
+  const p = (await db.settings.get('whoop_pending'))?.value as Pending | undefined;
+  if (p && Date.now() - p.at > PENDING_TTL) {
+    await db.settings.delete('whoop_pending');
+    return undefined;
+  }
+  return p;
+};
+
 /**
- * Запускается прямо из обработчика нажатия: окно открывается синхронно,
- * чтобы на iPhone авторизация шла внутри приложения с домашнего экрана, а не в отдельном Safari.
+ * Начинает вход в WHOOP. Окно открывается синхронно в обработчике нажатия.
+ * Результат входа шифруется ключом, который есть только у этого приложения,
+ * поэтому вход можно пройти в любом браузере, хоть на компьютере.
  */
-export async function startConnect() {
-  const popup = window.open('', '_blank');
+export async function startConnect(popup: Window | null = window.open('', '_blank')) {
   try {
     const r = await fetch('/api/whoop/config');
     if (!r.ok) throw new Error('WHOOP ещё не настроен на сервере');
     const { clientId } = (await r.json()) as { clientId: string };
     const state = randomState();
-    await db.settings.put({ key: 'whoop_state', value: { state, at: Date.now() } });
+    const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+    const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+    const b = await fetch('/api/whoop/begin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, pub }) });
+    if (!b.ok) throw new Error('Сервер не готов к подключению WHOOP');
     const url = `${AUTH_URL}?${new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri(), scope: SCOPES, state })}`;
+    await db.settings.put({ key: 'whoop_pending', value: { state, privateKey: pair.privateKey, url, at: Date.now() } satisfies Pending });
     if (popup) popup.location.href = url;
-    else location.href = url;
+    else window.open(url, '_blank');
   } catch (e) {
     popup?.close();
     throw e;
   }
+}
+
+export const cancelConnect = () => db.settings.delete('whoop_pending');
+
+const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** Забрать результат входа с сервера. true — подключено, false — ещё ждём */
+export async function claimPending(): Promise<boolean> {
+  const p = await getPending();
+  if (!p) return false;
+  const r = await fetch('/api/whoop/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: p.state }) });
+  if (r.status === 202) return false;
+  if (!r.ok) throw new HttpError(`HTTP ${r.status}`, r.status);
+  const sealed = (await r.json()) as { epk: JsonWebKey; iv: string; data: string };
+  const epk = await crypto.subtle.importKey('jwk', sealed.epk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const key = await crypto.subtle.deriveKey({ name: 'ECDH', public: epk }, p.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(sealed.iv) as BufferSource }, key, fromB64(sealed.data) as BufferSource);
+  const tok = JSON.parse(new TextDecoder().decode(plain)) as TokenResponse;
+  if (!tok.access_token) throw new Error('WHOOP не выдал доступ');
+  await saveAuth(tok);
+  await db.settings.delete('whoop_pending');
+  return true;
 }
 
 async function tokenRequest(body: { code?: string; refresh_token?: string }): Promise<TokenResponse> {
@@ -53,14 +91,21 @@ async function saveAuth(j: TokenResponse) {
   await db.settings.delete('whoop_error');
 }
 
+/** Страница возврата из WHOOP: отдаём код серверу. Возвращает true, если это окно и есть приложение и всё уже подключено */
 export async function finishConnect(params: URLSearchParams) {
   if (params.get('error')) throw new Error(params.get('error_description') || 'Доступ к WHOOP не выдан');
   const code = params.get('code');
   const state = params.get('state');
-  const saved = (await db.settings.get('whoop_state'))?.value as { state: string; at: number } | undefined;
-  if (!code || !state || !saved || saved.state !== state || Date.now() - saved.at > 15 * 60_000) throw new Error('STATE');
-  await saveAuth(await tokenRequest({ code }));
-  await db.settings.delete('whoop_state');
+  if (!code || !state) throw new Error('WHOOP вернул неполный ответ');
+  const r = await fetch('/api/whoop/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, state }) });
+  if (r.status === 410) throw new Error('Ссылка для входа устарела. Нажми «Подключить» в приложении ещё раз.');
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error_description || j.error || `Ошибка ${r.status}`);
+  }
+  const local = await getPending();
+  if (local?.state === state) return claimPending();
+  return false;
 }
 
 export const getAuth = async () => (await db.settings.get('whoop_auth'))?.value as Auth | undefined;
@@ -203,7 +248,7 @@ export async function disconnectWhoop() {
   } catch {
     /* отключаем локально в любом случае */
   }
-  await db.settings.bulkDelete(['whoop_auth', 'whoop_sync', 'whoop_state', 'whoop_error']);
+  await db.settings.bulkDelete(['whoop_auth', 'whoop_sync', 'whoop_pending', 'whoop_error']);
 }
 
 export const fmtHM = (ms?: number) => {
