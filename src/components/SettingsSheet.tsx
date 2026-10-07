@@ -1,4 +1,7 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
+import { db } from '../db';
+import { disconnectWhoop, startConnect, syncWhoop } from '../lib/whoop';
 import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
 import { Sheet } from './Sheet';
@@ -13,6 +16,16 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const whoopAuth = useLiveQuery(() => db.settings.get('whoop_auth'));
+  const whoopSync = useLiveQuery(() => db.settings.get('whoop_sync'));
+  const whoopError = useLiveQuery(() => db.settings.get('whoop_error'));
+  const [whoopMsg, setWhoopMsg] = useState('');
+  const syncedAt = (whoopSync?.value as { at: number } | undefined)?.at;
+
+  const connect = () => {
+    setWhoopMsg('');
+    startConnect().catch((e) => setWhoopMsg((e as Error).message));
+  };
 
   const reset = () => {
     setMode('menu');
@@ -80,12 +93,45 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
             <span className="label">Подключения</span>
             <div className="list-box">
               <div className="list-row">
-                WHOOP <span className="val">скоро</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  WHOOP
+                  {whoopAuth && (
+                    <span className="caption" style={{ fontWeight: 500 }}>
+                      {syncedAt ? `обновлено в ${new Date(syncedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'подключён'}
+                    </span>
+                  )}
+                  {!whoopAuth && whoopError && (
+                    <span className="caption" style={{ fontWeight: 500 }}>
+                      нужно войти заново
+                    </span>
+                  )}
+                </span>
+                {whoopAuth ? (
+                  <span style={{ display: 'flex', gap: 14 }}>
+                    <button
+                      className="btn-text"
+                      onClick={() => {
+                        setWhoopMsg('');
+                        syncWhoop(true).catch((e) => setWhoopMsg((e as Error).message));
+                      }}
+                    >
+                      Обновить
+                    </button>
+                    <button className="btn-text" style={{ color: 'var(--muted)' }} onClick={() => disconnectWhoop()}>
+                      Отключить
+                    </button>
+                  </span>
+                ) : (
+                  <button className="btn-text" onClick={connect}>
+                    Подключить
+                  </button>
+                )}
               </div>
               <div className="list-row">
                 Google Календарь <span className="val">скоро</span>
               </div>
             </div>
+            {whoopMsg && <span className="error-text">{whoopMsg}</span>}
           </div>
 
           <div className="field">

@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
 import { db, type Task } from '../db';
 import { dismissPlan, moveTask, setDone, setMood } from '../lib/actions';
-import { BUDGET, MOOD_CHARGE, ZONE_COLOR, ZONE_LABEL, cheer, load, proposeMoves, zoneOf } from '../lib/battery';
+import { BUDGET, ZONE_COLOR, ZONE_LABEL, cheer, dayCharge, load, proposeMoves, zoneOf } from '../lib/battery';
+import { fmtHM } from '../lib/whoop';
 import { addDays, longDate, plural, toKey } from '../lib/dates';
 import { Bolts, Load } from '../components/Bolts';
 import { DoneRow, TaskRow } from '../components/TaskRow';
@@ -43,6 +44,7 @@ export function Today({
 }) {
   const all = useLiveQuery(() => db.tasks.where('date').belowOrEqual(today).toArray(), [today]);
   const day = useLiveQuery(() => db.days.get(today), [today]);
+  const whoop = useLiveQuery(() => db.whoop.get(today), [today]);
   const [details, setDetails] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
@@ -58,7 +60,7 @@ export function Today({
   const done = dayTasks.filter((t) => t.done).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
 
   const mood = day?.mood;
-  const charge = mood ? MOOD_CHARGE[mood] : null;
+  const charge = dayCharge(mood, whoop?.recovery);
   const zone = charge != null ? zoneOf(charge) : null;
   const budget = zone ? BUDGET[zone] : null;
   const planned = load(dayTasks);
@@ -92,23 +94,7 @@ export function Today({
         </button>
       </div>
 
-      {charge == null || editMood ? (
-        <div className="card drop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 17, fontWeight: 800 }}>Как ты сегодня?</span>
-            <span className="sub" style={{ fontWeight: 500 }}>
-              Пока WHOOP не подключён, заряд дня считается по самочувствию
-            </span>
-          </div>
-          <MoodPicker
-            value={mood}
-            onPick={async (n) => {
-              await setMood(today, n);
-              setEditMood(false);
-            }}
-          />
-        </div>
-      ) : (
+      {charge != null && (
         <div className="card battery-card">
           <button className="battery-btn" aria-expanded={details} onClick={() => setDetails(!details)} aria-label={`Заряд ${charge}%, ${ZONE_LABEL[zone!]}. Подробнее`}>
             <span className="battery" aria-hidden="true">
@@ -127,16 +113,18 @@ export function Today({
           </button>
           {details && (
             <div className="drop" style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 16 }}>
-              <div className="grid2">
-                <div className="metric">
-                  <span className="caption">Самочувствие</span>
-                  <b>{mood} из 5</b>
-                </div>
+              <div className="grid3">
                 <div className="metric">
                   <span className="caption">Recovery</span>
-                  <b className="muted" style={{ fontWeight: 600 }}>
-                    после WHOOP
-                  </b>
+                  <b>{whoop?.recovery != null ? `${whoop.recovery}%` : whoop?.recoveryState === 'PENDING_SCORE' ? 'считается' : '—'}</b>
+                </div>
+                <div className="metric">
+                  <span className="caption">Сон</span>
+                  <b>{fmtHM(whoop?.sleepMs)}</b>
+                </div>
+                <div className="metric">
+                  <span className="caption">Самочувствие</span>
+                  <b>{mood ? `${mood} из 5` : '—'}</b>
                 </div>
               </div>
               <div className="inline-row">
@@ -149,11 +137,33 @@ export function Today({
                   <Load n={planned} />
                 </span>
               </div>
-              <button className="btn-text" style={{ alignSelf: 'flex-start' }} onClick={() => setEditMood(true)}>
-                Изменить самочувствие
-              </button>
+              {mood && (
+                <button className="btn-text" style={{ alignSelf: 'flex-start' }} onClick={() => setEditMood(true)}>
+                  Изменить самочувствие
+                </button>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {(!mood || editMood) && (
+        <div className="card drop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 17, fontWeight: 800 }}>Как ты сегодня?</span>
+            {whoop?.recovery == null && (
+              <span className="sub" style={{ fontWeight: 500 }}>
+                Пока нет данных WHOOP, заряд дня считается по самочувствию
+              </span>
+            )}
+          </div>
+          <MoodPicker
+            value={mood}
+            onPick={async (n) => {
+              await setMood(today, n);
+              setEditMood(false);
+            }}
+          />
         </div>
       )}
 

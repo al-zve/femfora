@@ -9,6 +9,8 @@ import { AddSheet } from './components/AddSheet';
 import { TaskSheet } from './components/TaskSheet';
 import { SettingsSheet, type ThemePref } from './components/SettingsSheet';
 import { CheckIcon, PlusIcon } from './components/icons';
+import { WhoopCallback } from './components/WhoopCallback';
+import { syncWhoop } from './lib/whoop';
 
 type Tab = 'today' | 'tasks' | 'health';
 type SheetState = { kind: 'add' } | { kind: 'task'; id: string } | { kind: 'settings' } | null;
@@ -43,7 +45,32 @@ function useTheme(): ThemePref {
   return pref;
 }
 
+function useWhoopSync() {
+  useEffect(() => {
+    const run = () => document.visibilityState === 'visible' && syncWhoop().catch(() => undefined);
+    run();
+    document.addEventListener('visibilitychange', run);
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel('femfora');
+      ch.onmessage = (e) => e.data === 'whoop-connected' && syncWhoop(true).catch(() => undefined);
+    } catch {
+      /* старые браузеры */
+    }
+    return () => {
+      document.removeEventListener('visibilitychange', run);
+      ch?.close();
+    };
+  }, []);
+}
+
 export default function App() {
+  if (location.pathname === '/whoop/callback') return <WhoopCallback />;
+  return <Main />;
+}
+
+function Main() {
+  useWhoopSync();
   const today = useToday();
   const theme = useTheme();
   const [tab, setTab] = useState<Tab>('today');

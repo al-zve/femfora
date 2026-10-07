@@ -5,6 +5,14 @@ export type Zone = 'high' | 'mid' | 'low';
 /** Пока WHOOP не подключён, заряд считается по самочувствию 1–5 */
 export const MOOD_CHARGE = [0, 15, 35, 55, 75, 90];
 
+/** Заряд дня: recovery WHOOP с поправкой на самочувствие; без WHOOP — только самочувствие */
+export function dayCharge(mood?: number, recovery?: number): number | null {
+  if (recovery != null && mood) return Math.round(0.75 * recovery + 0.25 * MOOD_CHARGE[mood]);
+  if (recovery != null) return recovery;
+  if (mood) return MOOD_CHARGE[mood];
+  return null;
+}
+
 export const zoneOf = (charge: number): Zone => (charge >= 67 ? 'high' : charge >= 34 ? 'mid' : 'low');
 export const ZONE_LABEL: Record<Zone, string> = {
   high: 'Можно нагружаться',

@@ -52,6 +52,27 @@ export interface Day {
   planDismissed?: boolean;
 }
 
+/** данные WHOOP за один физиологический день (по дате пробуждения) */
+export interface WhoopDay {
+  date: string;
+  cycleId: number;
+  recovery?: number;
+  recoveryState?: string;
+  hrv?: number;
+  rhr?: number;
+  spo2?: number;
+  skinTemp?: number;
+  strain?: number;
+  sleepMs?: number;
+  inBedMs?: number;
+  deepMs?: number;
+  remMs?: number;
+  lightMs?: number;
+  awakeMs?: number;
+  sleepPerf?: number;
+  updatedAt: number;
+}
+
 export interface Setting {
   key: string;
   value: unknown;
@@ -62,6 +83,7 @@ class FemForaDB extends Dexie {
   moves!: Table<Move, string>;
   days!: Table<Day, string>;
   settings!: Table<Setting, string>;
+  whoop!: Table<WhoopDay, string>;
 
   constructor() {
     super('femfora');
@@ -70,6 +92,9 @@ class FemForaDB extends Dexie {
       moves: 'id, from, to, taskId',
       days: 'date',
       settings: 'key'
+    });
+    this.version(2).stores({
+      whoop: 'date, cycleId'
     });
   }
 }
