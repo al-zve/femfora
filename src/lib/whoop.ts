@@ -30,28 +30,22 @@ export const getPending = async () => {
 };
 
 /**
- * Начинает вход в WHOOP. Окно открывается синхронно в обработчике нажатия.
- * Результат входа шифруется ключом, который есть только у этого приложения,
- * поэтому вход можно пройти в любом браузере, хоть на компьютере.
+ * Готовит ссылку для входа в WHOOP. Сам вход пользовательница проходит в Safari:
+ * окно поверх приложения с домашнего экрана на iPhone зависает.
+ * Результат входа шифруется ключом, который есть только у этого приложения.
  */
-export async function startConnect(popup: Window | null = window.open('', '_blank')) {
-  try {
-    const r = await fetch('/api/whoop/config');
-    if (!r.ok) throw new Error('WHOOP ещё не настроен на сервере');
-    const { clientId } = (await r.json()) as { clientId: string };
-    const state = randomState();
-    const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
-    const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
-    const b = await fetch('/api/whoop/begin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, pub }) });
-    if (!b.ok) throw new Error('Сервер не готов к подключению WHOOP');
-    const url = `${AUTH_URL}?${new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri(), scope: SCOPES, state })}`;
-    await db.settings.put({ key: 'whoop_pending', value: { state, privateKey: pair.privateKey, url, at: Date.now() } satisfies Pending });
-    if (popup) popup.location.href = url;
-    else window.open(url, '_blank');
-  } catch (e) {
-    popup?.close();
-    throw e;
-  }
+export async function startConnect() {
+  const r = await fetch('/api/whoop/config');
+  if (!r.ok) throw new Error('WHOOP ещё не настроен на сервере');
+  const { clientId } = (await r.json()) as { clientId: string };
+  const state = randomState();
+  const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+  const pub = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const b = await fetch('/api/whoop/begin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, pub }) });
+  if (!b.ok) throw new Error('Сервер не готов к подключению WHOOP');
+  const url = `${AUTH_URL}?${new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri(), scope: SCOPES, state })}`;
+  await db.settings.put({ key: 'whoop_pending', value: { state, privateKey: pair.privateKey, url, at: Date.now() } satisfies Pending });
+  return url;
 }
 
 export const cancelConnect = () => db.settings.delete('whoop_pending');

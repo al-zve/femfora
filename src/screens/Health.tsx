@@ -4,7 +4,8 @@ import { db, type WhoopDay } from '../db';
 import { setMood } from '../lib/actions';
 import { ZONE_COLOR, ZONE_LABEL, zoneOf } from '../lib/battery';
 import { DOW_SHORT, addDays, dowIdx, shortDate, toKey } from '../lib/dates';
-import { fmtHM, startConnect } from '../lib/whoop';
+import { fmtHM } from '../lib/whoop';
+import { WhoopConnect } from '../components/WhoopConnect';
 import { BoltIcon, GearIcon } from '../components/icons';
 import { MoodPicker } from './Today';
 
@@ -146,7 +147,6 @@ function Chart({
 export function Health({ today, openSettings }: { today: string; openSettings: () => void }) {
   const [range, setRange] = useState<Range>(7);
   const [selRaw, setSel] = useState<number | null>(null);
-  const [connectErr, setConnectErr] = useState('');
   const from = addDays(today, -(range - 1));
   const day = useLiveQuery(() => db.days.get(today), [today]);
   const auth = useLiveQuery(() => db.settings.get('whoop_auth'));
@@ -188,16 +188,8 @@ export function Health({ today, openSettings }: { today: string; openSettings: (
             <span className="sub" style={{ fontWeight: 500, lineHeight: 1.45 }}>
               Подключи WHOOP, чтобы видеть recovery, сон, HRV и пульс и чтобы заряд дня считался по ним.
             </span>
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                setConnectErr('');
-                startConnect().catch((e) => setConnectErr((e as Error).message));
-              }}
-            >
-              Подключить WHOOP
-            </button>
-            {connectErr && <span className="error-text">{connectErr}</span>}
+            <WhoopConnect />
+
           </div>
         ) : (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
