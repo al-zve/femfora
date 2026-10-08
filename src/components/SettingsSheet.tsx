@@ -85,7 +85,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   };
 
   return (
-    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : mode === 'calib' ? 'Научить оценку' : 'Настройки'} onClose={onClose}>
+    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : mode === 'calib' ? 'Настроить оценку' : 'Настройки'} onClose={onClose}>
       {mode === 'menu' && (
         <>
           <div className="field">
@@ -160,7 +160,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
             <span className="label">Оценка нагрузки</span>
             <div className="list-box">
               <button className="list-row" onClick={() => setMode('calib')}>
-                Научить оценку
+                Настроить оценку
                 <span className="val" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   {calibCount ? `${calibCount} из ${CALIBRATION.length}` : 'не пройдено'}
                   <ChevronRight size={18} style={{ color: 'var(--muted)' }} />

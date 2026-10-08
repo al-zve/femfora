@@ -8,7 +8,7 @@ import { BoltIcon } from './icons';
 
 const LABELS: Record<Energy, string> = { 1: 'Лёгкая', 2: 'Средняя', 3: 'Тяжёлая' };
 
-/** «Научить оценку»: ты выбираешь нагрузку для типичных задач, оценка потом ищет похожие */
+/** «Настроить оценку»: ты выбираешь нагрузку для типичных задач, оценка потом ищет похожие */
 export function Calibrate({ onBack }: { onBack: () => void }) {
   const answers = (useLiveQuery(() => db.settings.get('energy_calib'))?.value as CalibAnswers | undefined) ?? {};
   const [i, setI] = useState(() => {

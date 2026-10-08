@@ -4,7 +4,7 @@ import type { Example } from './estimate';
 
 export type CalibAnswers = Record<string, Energy>;
 
-/** Примеры для оценки: твои ответы в «Научить оценку» и твои задачи. Всё хранится на устройстве */
+/** Примеры для оценки: твои ответы в «Настроить оценку» и твои задачи. Всё хранится на устройстве */
 export function useExamples(): Example[] {
   const calib = useLiveQuery(() => db.settings.get('energy_calib'))?.value as CalibAnswers | undefined;
   const tasks = useLiveQuery(() => db.tasks.orderBy('date').reverse().limit(300).toArray(), []);
