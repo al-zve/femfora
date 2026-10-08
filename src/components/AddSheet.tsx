@@ -4,6 +4,7 @@ import { addTask } from '../lib/actions';
 import { DOW_SHORT, addDays, dowIdx, shortDate } from '../lib/dates';
 import { bestDay, budgetFor, loadOn } from '../lib/plan';
 import { usePlan } from '../lib/usePlan';
+import { estimateEnergy } from '../lib/estimate';
 import { Load } from './Bolts';
 import { Sheet } from './Sheet';
 import { BoltIcon } from './icons';
@@ -14,6 +15,7 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
   const [energy, setEnergy] = useState<Energy>(2);
   const [list, setList] = useState<ListId>('personal');
   const [date, setDate] = useState(defaultDate);
+  const [hint, setHint] = useState('');
   const tomorrow = addDays(today, 1);
   const isOther = date !== today && date !== tomorrow;
   const plan = usePlan(today);
@@ -77,16 +79,44 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
         </div>
       </div>
       <div className="field">
-        <span className="label">Нагрузка</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: -8 }}>
+          <span className="label">Нагрузка</span>
+          <button
+            className="btn-text"
+            disabled={!title.trim()}
+            style={{ opacity: title.trim() ? 1 : 0.4 }}
+            onClick={() => {
+              const r = estimateEnergy(title, subs.split('\n').filter((x) => x.trim()).length);
+              setEnergy(r.energy);
+              setHint(r.reason);
+            }}
+          >
+            Оценить
+          </button>
+        </div>
         <div className="grid3">
           {([1, 2, 3] as Energy[]).map((v) => (
-            <button key={v} className="chip" aria-pressed={energy === v} aria-label={['', 'Лёгкая', 'Средняя', 'Тяжёлая'][v]} onClick={() => setEnergy(v)}>
+            <button
+              key={v}
+              className="chip"
+              aria-pressed={energy === v}
+              aria-label={['', 'Лёгкая', 'Средняя', 'Тяжёлая'][v]}
+              onClick={() => {
+                setEnergy(v);
+                setHint('');
+              }}
+            >
               {Array.from({ length: v }, (_, i) => (
                 <BoltIcon key={i} color="var(--bolt)" />
               ))}
             </button>
           ))}
         </div>
+        {hint && (
+          <span className="caption drop" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+            {hint}
+          </span>
+        )}
       </div>
       {over && (
         <div className="proposal drop" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
