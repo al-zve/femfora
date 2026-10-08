@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CloseIcon } from './icons';
+import { sheetOpened } from '../lib/update';
 
 export function Sheet({
   title,
@@ -17,6 +18,8 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [lined, setLined] = useState(false);
+
+  useEffect(sheetOpened, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();

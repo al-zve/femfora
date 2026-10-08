@@ -6,6 +6,9 @@ import '@fontsource/nunito/700.css';
 import '@fontsource/nunito/800.css';
 import './styles.css';
 import App from './App';
+import { initUpdates } from './lib/update';
+
+initUpdates();
 
 // Просим браузер не вычищать локальные данные
 navigator.storage?.persist?.().catch(() => undefined);

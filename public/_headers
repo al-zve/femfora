@@ -1,0 +1,16 @@
+# Код приложения всегда проверяется на сервере, чтобы обновления доходили сразу
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/version.json
+  Cache-Control: no-store
+# Файлы сборки с хешем в имени не меняются
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
