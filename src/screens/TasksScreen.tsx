@@ -1,9 +1,12 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
 import { db, type ListId, type Task } from '../db';
-import { setDone } from '../lib/actions';
+import { moveTask, setDone } from '../lib/actions';
+import { budgetFor, loadOn, phaseMod, phaseOn, proposePlan } from '../lib/plan';
+import { usePlan } from '../lib/usePlan';
+import { PHASE_IN } from '../lib/cycle';
 import { load } from '../lib/battery';
-import { DOW_SHORT, addDays, dayNum, dowIdx, fromKey, longDate, monthTitle, mondayOf, shortDate, toKey } from '../lib/dates';
+import { DOW_SHORT, addDays, dayNum, dowIdx, fromKey, longDate, monthTitle, mondayOf, plural, shortDate, toKey } from '../lib/dates';
 import { Bolts, Load } from '../components/Bolts';
 import { TaskRow } from '../components/TaskRow';
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, GearIcon } from '../components/icons';
@@ -15,14 +18,18 @@ export function TasksScreen({
   selected,
   onSelect,
   openTask,
-  openSettings
+  openSettings,
+  notify
 }: {
   today: string;
   selected: string;
   onSelect: (d: string) => void;
   openTask: (id: string) => void;
   openSettings: () => void;
+  notify: (t: string) => void;
 }) {
+  const plan = usePlan(today);
+  const overloaded = (d: string) => !!plan && d >= today && loadOn(plan, d) > budgetFor(plan, d);
   const tasks = useLiveQuery(() => db.tasks.toArray(), []);
   const moves = useLiveQuery(() => db.moves.toArray(), []);
   const [weekStart, setWeekStart] = useState(mondayOf(selected));
@@ -74,7 +81,8 @@ export function TasksScreen({
       color: sel ? '#fff' : isToday ? 'var(--accent-text)' : d < today ? 'var(--muted)' : 'var(--text)'
     };
   };
-  const dot = (d: string) => (counts.get(d) ? (d === selected ? '#fff' : 'var(--accent)') : 'transparent');
+  // точка: есть задачи; фуксия — день перегружен относительно ожидаемых сил
+  const dot = (d: string) => (overloaded(d) ? (d === selected ? '#fff' : 'var(--accent)') : counts.get(d) ? (d === selected ? 'rgba(255,255,255,0.7)' : 'var(--faint)') : 'transparent');
 
   const mid = fromKey(addDays(weekStart, 3));
   const title = monthMode ? monthTitle(cursor.y, cursor.m) : monthTitle(mid.getFullYear(), mid.getMonth());
@@ -99,28 +107,41 @@ export function TasksScreen({
 
   const doneN = dayTasks.filter((t) => t.done).length;
   const planned = load(dayTasks);
+  const selLoad = plan && selected >= today ? loadOn(plan, selected) : planned;
+  const selBudget = plan && selected >= today ? budgetFor(plan, selected) : null;
+  const ofBudget = <Load n={`${selLoad} из ~${selBudget ?? 0}`} size={12} />;
   let summary: React.ReactNode = null;
-  if (dayTasks.length + movedAway.length > 0) {
-    if (selected <= today) {
+  if (dayTasks.length + movedAway.length > 0 || (selected >= today && selLoad > 0)) {
+    if (selected < today) {
       summary = (
         <>
           сделано {doneN} из {dayTasks.length}
-          {selected === today && (
-            <>
-              {' · '}
-              <Load n={planned} size={12} />
-            </>
-          )}
+        </>
+      );
+    } else if (selected === today) {
+      summary = (
+        <>
+          сделано {doneN} из {dayTasks.length}
+          {selBudget != null && <> · {ofBudget}</>}
         </>
       );
     } else {
-      summary = (
-        <>
-          в плане <Load n={planned} size={12} />
-        </>
-      );
+      summary = selBudget != null ? <>в плане {ofBudget}</> : <>в плане <Load n={planned} size={12} /></>;
     }
   }
+
+  // разгрузка выбранного дня: все списки, для сегодня — вместе с просроченными
+  const isOver = overloaded(selected);
+  const toUnload = (tasks ?? []).filter((t) => !t.done && (t.date === selected || (selected === today && t.date < today)));
+  const unload = isOver && plan ? proposePlan(plan, toUnload, selected) : [];
+  const selPhase = plan ? phaseOn(plan, selected) : null;
+  const selMod = plan ? phaseMod(plan, selected) : 0;
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const anyOver = (monthMode ? monthCells : weekDays).some(overloaded);
+  const doUnload = async () => {
+    for (const m of unload) await moveTask(m.task, m.to);
+    notify(`Перенесено: ${unload.length} ${plural(unload.length, 'задача', 'задачи', 'задач')}`);
+  };
 
   return (
     <div className="screen">
@@ -194,6 +215,56 @@ export function TasksScreen({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {anyOver && (
+        <span className="legend" style={{ marginTop: -4 }}>
+          <span>
+            <i style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--accent)' }} />
+            день перегружен по ожидаемым силам
+          </span>
+        </span>
+      )}
+
+      {isOver && plan && (
+        <div className="proposal drop" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4 }}>
+            В плане {selLoad} из ~<Load n={selBudget ?? 0} size={13} /> — больше, чем обычно по силам
+          </span>
+          <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+            {selected === today && plan.todayBudget != null
+              ? 'Сегодняшний бюджет посчитан по заряду дня.'
+              : selMod < 0 && selPhase
+                ? `Обычный день — около 6 молний. В ${PHASE_IN[selPhase]} фазе твой recovery в среднем ниже, поэтому ожидаем меньше.`
+                : selMod > 0 && selPhase
+                  ? `Обычный день — около 6 молний. В ${PHASE_IN[selPhase]} фазе твой recovery в среднем выше, поэтому ожидаем больше.`
+                  : 'Для будущих дней ориентир — обычный день, около 6 молний. Утром бюджет уточнится по recovery и самочувствию.'}
+          </span>
+          {unload.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {unload.map((m) => (
+                <div key={m.task.id} className="proposal-item">
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                    <span style={{ overflowWrap: 'anywhere' }}>{m.task.title}</span>
+                    <span className="caption" style={{ fontWeight: 600 }}>
+                      → {m.to === addDays(today, 1) ? 'завтра' : `${DOW_SHORT[dowIdx(m.to)].toLowerCase()}, ${shortDate(m.to)}`}
+                    </span>
+                  </span>
+                  <Bolts n={m.task.energy} />
+                </div>
+              ))}
+            </div>
+          )}
+          {unload.length > 0 ? (
+            <button className="btn btn-secondary" style={{ background: 'var(--surface)', height: 44, alignSelf: 'flex-start' }} onClick={doUnload}>
+              Перенести {unload.length} {plural(unload.length, 'задачу', 'задачи', 'задач')}
+            </button>
+          ) : (
+            <span className="caption" style={{ fontWeight: 500 }}>
+              Перенести нечего: у задач есть время или близкий дедлайн.
+            </span>
+          )}
         </div>
       )}
 

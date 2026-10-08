@@ -14,7 +14,7 @@ export function Bolts({ n, size = 14 }: { n: Energy; size?: number }) {
 }
 
 /** число с молнией: «6⚡» */
-export function Load({ n, size = 13 }: { n: number; size?: number }) {
+export function Load({ n, size = 13 }: { n: number | string; size?: number }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
       {n}

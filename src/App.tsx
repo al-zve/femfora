@@ -123,7 +123,7 @@ function Main() {
   return (
     <div className="app">
       {tab === 'today' && <Today today={today} openTask={openTask} openSettings={openSettings} openCycle={openCycle} notify={notify} />}
-      {tab === 'tasks' && <TasksScreen today={today} selected={selected} onSelect={setSelected} openTask={openTask} openSettings={openSettings} />}
+      {tab === 'tasks' && <TasksScreen today={today} selected={selected} onSelect={setSelected} openTask={openTask} openSettings={openSettings} notify={notify} />}
       {tab === 'health' && <Health today={today} openSettings={openSettings} openCycle={openCycle} notify={notify} />}
 
       {toast && (

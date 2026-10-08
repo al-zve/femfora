@@ -2,9 +2,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
 import { db, type Task } from '../db';
 import { dismissPlan, moveTask, setDone, setMood } from '../lib/actions';
-import { BUDGET, ZONE_COLOR, ZONE_LABEL, cheer, dayCharge, load, proposeMoves, zoneOf } from '../lib/battery';
+import { BUDGET, ZONE_COLOR, ZONE_LABEL, cheer, dayCharge, load, zoneOf } from '../lib/battery';
+import { proposePlan } from '../lib/plan';
+import { usePlan } from '../lib/usePlan';
 import { fmtHM } from '../lib/whoop';
-import { addDays, longDate, plural, toKey } from '../lib/dates';
+import { addDays, dowIdx, DOW_SHORT, longDate, plural, shortDate, toKey } from '../lib/dates';
 import { Bolts, Load } from '../components/Bolts';
 import { DoneRow, TaskRow } from '../components/TaskRow';
 import { ChevronDown, ChevronRight, GearIcon } from '../components/icons';
@@ -66,6 +68,7 @@ export function Today({
   notify: (t: string) => void;
 }) {
   const cycle = useCycle();
+  const plan = usePlan(today);
   const all = useLiveQuery(() => db.tasks.where('date').belowOrEqual(today).toArray(), [today]);
   const day = useLiveQuery(() => db.days.get(today), [today]);
   const whoop = useLiveQuery(() => db.whoop.get(today), [today]);
@@ -89,8 +92,10 @@ export function Today({
   const zone = charge != null ? zoneOf(charge) : null;
   const budget = zone ? BUDGET[zone] : null;
   const planned = load(dayTasks);
-  const proposals = budget != null && !day?.planDismissed ? proposeMoves(dayTasks, today, budget) : [];
-  const proposedIds = planOpen ? new Set(proposals.map((t) => t.id)) : new Set<string>();
+  const proposals = budget != null && plan && !day?.planDismissed ? proposePlan(plan, dayTasks, today, budget) : [];
+  const allTomorrow = proposals.every((p) => p.to === addDays(today, 1));
+  const proposedTo = new Map(planOpen ? proposals.map((p) => [p.task.id, p.to] as [string, string]) : []);
+  const dayLabel = (d: string) => (d === addDays(today, 1) ? 'завтра' : `${DOW_SHORT[dowIdx(d)].toLowerCase()}, ${shortDate(d)}`);
 
   const complete = (t: Task) => {
     if (pending.includes(t.id)) return;
@@ -104,10 +109,9 @@ export function Today({
   };
 
   const accept = async () => {
-    const tomorrow = addDays(today, 1);
-    for (const t of proposals) await moveTask(t, tomorrow);
+    for (const p of proposals) await moveTask(p.task, p.to);
     setPlanOpen(false);
-    notify(`Перенесено на завтра: ${proposals.length} ${plural(proposals.length, 'задача', 'задачи', 'задач')}`);
+    notify(`Перенесено ${allTomorrow ? 'на завтра' : ''}: ${proposals.length} ${plural(proposals.length, 'задача', 'задачи', 'задач')}`.replace(' :', ':'));
   };
 
   return (
@@ -208,7 +212,7 @@ export function Today({
         <div className="proposal drop">
           <button className="proposal-head" aria-expanded={planOpen} onClick={() => setPlanOpen(!planOpen)}>
             <span>
-              Перенести {proposals.length} {plural(proposals.length, 'задачу', 'задачи', 'задач')} на завтра?
+              Перенести {proposals.length} {plural(proposals.length, 'задачу', 'задачи', 'задач')} {allTomorrow ? 'на завтра' : 'на другие дни'}?
             </span>
             <span className="btn-text" style={{ minHeight: 0 }}>
               {planOpen ? 'Скрыть' : 'Показать'}
@@ -219,12 +223,22 @@ export function Today({
               <span className="sub" style={{ display: 'inline-flex', gap: 4, alignItems: 'center', paddingBottom: 4 }}>
                 В плане <Load n={planned} size={12} /> при бюджете дня <Load n={budget!} size={12} />
               </span>
-              {proposals.map((t) => (
+              {proposals.map(({ task: t, to }) => (
                 <div key={t.id} className="proposal-item">
-                  <span>{t.title}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                    <span style={{ overflowWrap: 'anywhere' }}>{t.title}</span>
+                    <span className="caption" style={{ fontWeight: 600 }}>
+                      → {dayLabel(to)}
+                    </span>
+                  </span>
                   <Bolts n={t.energy} />
                 </div>
               ))}
+              {!allTomorrow && (
+                <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+                  Каждая задача — на ближайший день, где для неё хватает сил по прогнозу.
+                </span>
+              )}
               <div className="grid2" style={{ paddingTop: 4 }}>
                 <button className="btn btn-primary" onClick={accept}>
                   Перенести
@@ -253,7 +267,7 @@ export function Today({
             task={t}
             today={today}
             checked={pending.includes(t.id)}
-            highlight={proposedIds.has(t.id) ? 'на завтра?' : undefined}
+            highlight={proposedTo.has(t.id) ? `на ${dayLabel(proposedTo.get(t.id)!)}?` : undefined}
             onToggle={() => (pending.includes(t.id) ? undefined : complete(t))}
             onOpen={() => openTask(t.id)}
           />

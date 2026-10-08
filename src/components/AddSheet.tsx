@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import type { Energy, ListId } from '../db';
 import { addTask } from '../lib/actions';
-import { addDays, shortDate } from '../lib/dates';
+import { DOW_SHORT, addDays, dowIdx, shortDate } from '../lib/dates';
+import { bestDay, budgetFor, loadOn } from '../lib/plan';
+import { usePlan } from '../lib/usePlan';
+import { Load } from './Bolts';
 import { Sheet } from './Sheet';
 import { BoltIcon } from './icons';
 
@@ -13,6 +16,12 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
   const [date, setDate] = useState(defaultDate);
   const tomorrow = addDays(today, 1);
   const isOther = date !== today && date !== tomorrow;
+  const plan = usePlan(today);
+  const dayLoad = plan ? loadOn(plan, date) : 0;
+  const dayBudget = plan ? budgetFor(plan, date) : 0;
+  const over = !!plan && dayLoad + energy > dayBudget;
+  const alt = over && plan ? bestDay(plan, energy, date < today ? today : date) : null;
+  const label = (d: string) => (d === today ? 'сегодня' : d === tomorrow ? 'завтра' : `${DOW_SHORT[dowIdx(d)].toLowerCase()}, ${shortDate(d)}`);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -79,6 +88,18 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
           ))}
         </div>
       </div>
+      {over && (
+        <div className="proposal drop" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>
+            {date === today ? 'Сегодня' : date === tomorrow ? 'Завтра' : `${dowIdx(date) === 1 ? 'Во' : 'В'} ${label(date)}`} в плане {dayLoad} из ~<Load n={dayBudget} size={12} />, с этой задачей будет перебор.
+          </span>
+          {alt && (
+            <button className="btn btn-secondary" style={{ background: 'var(--surface)', height: 44, alignSelf: 'flex-start' }} onClick={() => setDate(alt)}>
+              Поставить на {label(alt)}
+            </button>
+          )}
+        </div>
+      )}
       <div className="field">
         <span className="label">Список</span>
         <div className="grid2">

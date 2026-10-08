@@ -1,9 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
-import { PHASE_NAME, PHASE_SHORT, type Phase, dayInfo, phaseRuns } from '../lib/cycle';
+import { PHASE_IN, PHASE_NAME, PHASE_SHORT, type Phase, dayInfo, phaseRuns } from '../lib/cycle';
 import { useCycle } from '../lib/useCycle';
 import { HEAVY_LOAD, LIGHT_LOAD, recoveryAfterLoad, recoveryByPhase } from '../lib/insights';
 import { CycleCard } from '../components/CycleCard';
+import { phaseAdjustments } from '../lib/plan';
 import { db, type WhoopDay } from '../db';
 import { setMood } from '../lib/actions';
 import { ZONE_COLOR, ZONE_LABEL, zoneOf } from '../lib/battery';
@@ -223,6 +224,8 @@ export function Health({
   const usedPhases = (['menstrual', 'follicular', 'ovulatory', 'luteal'] as Phase[]).filter((p) => runs.some((r) => r.phase === p));
   const byPhase = cycle && allWhoop ? recoveryByPhase(cycle, allWhoop) : null;
   const afterLoad = doneTasks && allWhoop ? recoveryAfterLoad(doneTasks, allWhoop) : null;
+  const adj = cycle && allWhoop ? phaseAdjustments(cycle, allWhoop) : {};
+  const adjPhases = (Object.keys(adj) as Phase[]).filter((p) => adj[p]!.mod !== 0);
   const w = new Map<string, WhoopDay>((whoopRows ?? []).map((r) => [r.date, r]));
   const moodBy = new Map((moods ?? []).map((d) => [d.date, d.mood]));
   const loadBy = new Map<string, number>();
@@ -411,6 +414,30 @@ export function Health({
             </span>
             <span className="caption" style={{ fontWeight: 500 }}>
               по {byPhase.cycles} {plural(byPhase.cycles, 'циклу', 'циклам', 'циклам')}, {byPhase.days} {plural(byPhase.days, 'день', 'дня', 'дней')} с данными WHOOP
+            </span>
+          </div>
+        )}
+        {Object.keys(adj).length > 0 && (
+          <div className="insight">
+            <span>
+              {adjPhases.length
+                ? 'План учитывает фазу: ' +
+                  [
+                    ['меньше', adjPhases.filter((p) => adj[p]!.mod < 0)],
+                    ['больше', adjPhases.filter((p) => adj[p]!.mod > 0)]
+                  ]
+                    .filter(([, ps]) => ps.length)
+                    .map(([w, ps]) => `в ${(ps as Phase[]).map((p) => PHASE_IN[p]).join(', ').replace(/, ([^,]+)$/, ' и $1')} ${ps.length > 1 ? 'фазах' : 'фазе'} ожидаем на 1 молнию ${w}`)
+                    .join(', ')
+                : 'Recovery у тебя почти не меняется по фазам, поэтому фаза на план не влияет'}
+            </span>
+            <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+              recovery по фазам:{' '}
+              {(['menstrual', 'follicular', 'ovulatory', 'luteal'] as Phase[])
+                .filter((p) => adj[p])
+                .map((p) => `${PHASE_SHORT[p]} ${adj[p]!.avg}%`)
+                .join(', ')}{' '}
+              при среднем {Object.values(adj)[0]!.overall}%. Фаза влияет на план, если отличие 8 и больше
             </span>
           </div>
         )}

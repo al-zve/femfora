@@ -8,6 +8,13 @@ export const PHASE_NAME: Record<Phase, string> = {
   ovulatory: 'овуляторная',
   luteal: 'лютеиновая'
 };
+/** «в лютеиновой фазе» */
+export const PHASE_IN: Record<Phase, string> = {
+  menstrual: 'менструальной',
+  follicular: 'фолликулярной',
+  ovulatory: 'овуляторной',
+  luteal: 'лютеиновой'
+};
 export const PHASE_SHORT: Record<Phase, string> = { menstrual: 'М', follicular: 'Ф', ovulatory: 'О', luteal: 'Л' };
 
 export const DEFAULT_CYCLE = 28;
