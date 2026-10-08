@@ -7,7 +7,28 @@ import { fmtHM } from '../lib/whoop';
 import { addDays, longDate, plural, toKey } from '../lib/dates';
 import { Bolts, Load } from '../components/Bolts';
 import { DoneRow, TaskRow } from '../components/TaskRow';
-import { ChevronDown, GearIcon } from '../components/icons';
+import { ChevronDown, ChevronRight, GearIcon } from '../components/icons';
+import { dayInfo, type DayInfo } from '../lib/cycle';
+import { useCycle } from '../lib/useCycle';
+
+function CycleRow({ info, onOpen }: { info: DayInfo; onOpen: () => void }) {
+  return (
+    <button className="cycle-row" onClick={onOpen} aria-label={`Цикл, день ${info.day}. Подробнее`}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span className="sub" style={{ fontSize: 15 }}>
+          Цикл
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 800 }}>День {info.day}</span>
+        {info.lateBy > 0 && (
+          <span className="sub" style={{ fontSize: 14, color: 'var(--accent-text)' }}>
+            задержка {info.lateBy} {plural(info.lateBy, 'день', 'дня', 'дней')}
+          </span>
+        )}
+      </span>
+      <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
+    </button>
+  );
+}
 
 const MOOD_WORDS = ['', 'без сил', 'мало сил', 'нормально', 'хорошо', 'полна энергии'];
 
@@ -35,13 +56,16 @@ export function Today({
   today,
   openTask,
   openSettings,
+  openCycle,
   notify
 }: {
   today: string;
   openTask: (id: string) => void;
   openSettings: () => void;
+  openCycle: () => void;
   notify: (t: string) => void;
 }) {
+  const cycle = useCycle();
   const all = useLiveQuery(() => db.tasks.where('date').belowOrEqual(today).toArray(), [today]);
   const day = useLiveQuery(() => db.days.get(today), [today]);
   const whoop = useLiveQuery(() => db.whoop.get(today), [today]);
@@ -59,6 +83,7 @@ export function Today({
   const active = dayTasks.filter((t) => !t.done).sort(sortTasks);
   const done = dayTasks.filter((t) => t.done).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
 
+  const cycleInfo = cycle ? dayInfo(cycle, today) : null;
   const mood = day?.mood;
   const charge = dayCharge(mood, whoop?.recovery);
   const zone = charge != null ? zoneOf(charge) : null;
@@ -144,6 +169,18 @@ export function Today({
               )}
             </div>
           )}
+          {cycleInfo && (
+            <>
+              <div className="divider" />
+              <CycleRow info={cycleInfo} onOpen={openCycle} />
+            </>
+          )}
+        </div>
+      )}
+
+      {charge == null && cycleInfo && (
+        <div className="card" style={{ padding: '0 16px' }}>
+          <CycleRow info={cycleInfo} onOpen={openCycle} />
         </div>
       )}
 

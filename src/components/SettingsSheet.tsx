@@ -7,6 +7,8 @@ import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
 import { Sheet } from './Sheet';
 import { ChevronRight } from './icons';
+import { DEFAULT_PERIOD } from '../lib/cycle';
+import { plural } from '../lib/dates';
 
 export type ThemePref = 'light' | 'dark' | 'system';
 
@@ -20,6 +22,8 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const whoopAuth = useLiveQuery(() => db.settings.get('whoop_auth'));
   const whoopSync = useLiveQuery(() => db.settings.get('whoop_sync'));
   const whoopError = useLiveQuery(() => db.settings.get('whoop_error'));
+  const periodSetting = useLiveQuery(() => db.settings.get('period_len'));
+  const periodLen = typeof periodSetting?.value === 'number' ? periodSetting.value : DEFAULT_PERIOD;
 
   const [whoopMsg, setWhoopMsg] = useState('');
   const syncedAt = (whoopSync?.value as { at: number } | undefined)?.at;
@@ -130,6 +134,29 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
               </div>
             </div>
             {whoopMsg && <span className="error-text">{whoopMsg}</span>}
+          </div>
+
+          <div className="field">
+            <span className="label">Цикл</span>
+            <div className="list-box">
+              <div className="list-row">
+                Длительность месячных
+                <span className="stepper">
+                  <button aria-label="Меньше" disabled={periodLen <= 2} onClick={() => setSetting('period_len', periodLen - 1)}>
+                    −
+                  </button>
+                  <output aria-live="polite">
+                    {periodLen} {plural(periodLen, 'день', 'дня', 'дней')}
+                  </output>
+                  <button aria-label="Больше" disabled={periodLen >= 10} onClick={() => setSetting('period_len', periodLen + 1)}>
+                    +
+                  </button>
+                </span>
+              </div>
+              <div className="list-row">
+                Импорт из Maya <span className="val">скоро</span>
+              </div>
+            </div>
           </div>
 
           <div className="field">

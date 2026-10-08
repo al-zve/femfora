@@ -10,10 +10,11 @@ import { TaskSheet } from './components/TaskSheet';
 import { SettingsSheet, type ThemePref } from './components/SettingsSheet';
 import { CheckIcon, PlusIcon } from './components/icons';
 import { WhoopCallback } from './components/WhoopCallback';
+import { CycleSheet } from './components/CycleSheet';
 import { claimPending, getPending, syncWhoop } from './lib/whoop';
 
 type Tab = 'today' | 'tasks' | 'health';
-type SheetState = { kind: 'add' } | { kind: 'task'; id: string } | { kind: 'settings' } | null;
+type SheetState = { kind: 'add' } | { kind: 'task'; id: string } | { kind: 'settings' } | { kind: 'cycle' } | null;
 
 function useToday() {
   const [today, setToday] = useState(todayKey());
@@ -112,12 +113,18 @@ function Main() {
   const close = useCallback(() => setSheet(null), []);
   const openTask = useCallback((id: string) => setSheet({ kind: 'task', id }), []);
   const openSettings = useCallback(() => setSheet({ kind: 'settings' }), []);
+  const openCycle = useCallback(() => setSheet({ kind: 'cycle' }), []);
+  const goTab = (v: Tab) => {
+    setTab(v);
+    if (v === 'tasks' && tab !== 'tasks') setSelected(today);
+    window.scrollTo({ top: 0 });
+  };
 
   return (
     <div className="app">
-      {tab === 'today' && <Today today={today} openTask={openTask} openSettings={openSettings} notify={notify} />}
+      {tab === 'today' && <Today today={today} openTask={openTask} openSettings={openSettings} openCycle={openCycle} notify={notify} />}
       {tab === 'tasks' && <TasksScreen today={today} selected={selected} onSelect={setSelected} openTask={openTask} openSettings={openSettings} />}
-      {tab === 'health' && <Health today={today} openSettings={openSettings} />}
+      {tab === 'health' && <Health today={today} openSettings={openSettings} openCycle={openCycle} notify={notify} />}
 
       {toast && (
         <div className="toast-wrap" role="status" aria-live="polite">
@@ -140,11 +147,7 @@ function Main() {
             <button
               key={v}
               aria-current={tab === v ? 'page' : undefined}
-              onClick={() => {
-                setTab(v);
-                if (v === 'tasks' && tab !== 'tasks') setSelected(today);
-                window.scrollTo({ top: 0 });
-              }}
+              onClick={() => goTab(v)}
             >
               {l}
             </button>
@@ -157,6 +160,19 @@ function Main() {
 
       {sheet?.kind === 'add' && <AddSheet today={today} defaultDate={tab === 'tasks' && selected >= today ? selected : today} onClose={close} />}
       {sheet?.kind === 'task' && <TaskSheet id={sheet.id} today={today} onClose={close} onNotice={notify} />}
+      {sheet?.kind === 'cycle' && (
+        <CycleSheet
+          today={today}
+          onClose={close}
+          onNotice={notify}
+          onCalendar={() => {
+            close();
+            setTab('health');
+            // календарь цикла в разделе «Здоровье»
+            setTimeout(() => document.getElementById('cycle')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150);
+          }}
+        />
+      )}
       {sheet?.kind === 'settings' && <SettingsSheet theme={theme} onClose={close} onNotice={notify} />}
     </div>
   );

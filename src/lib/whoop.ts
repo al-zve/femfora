@@ -186,25 +186,42 @@ export function syncWhoop(force = false) {
   return syncing;
 }
 
+/** версия привязки дней: 2 — день по пробуждению, а не по засыпанию */
+const MAP_V = 2;
+
 async function doSync(force: boolean) {
   if (!(await getAuth())) return;
-  const meta = (await db.settings.get('whoop_sync'))?.value as { at: number } | undefined;
-  if (!force && meta && Date.now() - meta.at < 10 * 60_000) return;
+  const meta = (await db.settings.get('whoop_sync'))?.value as { at: number; v?: number } | undefined;
+  const full = !meta || meta.v !== MAP_V;
+  if (!force && !full && Date.now() - meta.at < 10 * 60_000) return;
 
-  const days = meta ? 5 : 120;
+  const days = full ? 120 : 5;
   const start = new Date(Date.now() - days * 86_400_000).toISOString();
   const cycles = await all<Cycle>('cycle', start);
   const recs = await all<Recovery>('recovery', start);
-  const sleeps = await all<Sleep>('sleep', start);
+  const sleeps = (await all<Sleep>('sleep', start)).filter((s) => !s.nap);
+
+  const sleepByCycle = new Map<number, Sleep>();
+  for (const s of sleeps) if (s.cycle_id != null) sleepByCycle.set(s.cycle_id, s);
+
+  // Цикл WHOOP начинается в момент засыпания. День — это дата пробуждения:
+  // конец основного сна, а если сна ещё нет — начало цикла плюс 12 часов.
+  const dayOf = (c: Cycle) => {
+    const sl = sleepByCycle.get(c.id);
+    if (sl?.end) return localKey(sl.end, sl.timezone_offset);
+    return localKey(new Date(Date.parse(c.start) + 12 * 3600_000).toISOString(), c.timezone_offset);
+  };
 
   const now = Date.now();
   const byCycle = new Map<number, WhoopDay>();
-  const byDate = new Map<string, WhoopDay>();
+  const byDate = new Map<string, { d: WhoopDay; start: string }>();
   for (const c of cycles) {
-    const d: WhoopDay = { date: localKey(c.start, c.timezone_offset), cycleId: c.id, updatedAt: now };
+    const d: WhoopDay = { date: dayOf(c), cycleId: c.id, updatedAt: now };
     if (c.score_state === 'SCORED' && c.score?.strain != null) d.strain = Math.round(c.score.strain * 10) / 10;
     byCycle.set(c.id, d);
-    byDate.set(d.date, d);
+    const prev = byDate.get(d.date);
+    // два цикла на одну дату бывают редко (например, смена часового пояса): оставляем более поздний
+    if (!prev || prev.start < c.start) byDate.set(d.date, { d, start: c.start });
   }
   for (const r of recs) {
     const d = byCycle.get(r.cycle_id);
@@ -219,8 +236,8 @@ async function doSync(force: boolean) {
     }
   }
   for (const s of sleeps) {
-    if (s.nap || s.score_state !== 'SCORED' || !s.score) continue;
-    const d = (s.cycle_id != null && byCycle.get(s.cycle_id)) || byDate.get(localKey(s.end, s.timezone_offset));
+    if (s.score_state !== 'SCORED' || !s.score) continue;
+    const d = (s.cycle_id != null && byCycle.get(s.cycle_id)) || byDate.get(localKey(s.end, s.timezone_offset))?.d;
     if (!d) continue;
     const st = s.score.stage_summary;
     d.deepMs = st.total_slow_wave_sleep_time_milli;
@@ -231,8 +248,14 @@ async function doSync(force: boolean) {
     d.sleepMs = st.total_slow_wave_sleep_time_milli + st.total_rem_sleep_time_milli + st.total_light_sleep_time_milli;
     d.sleepPerf = s.score.sleep_performance_percentage;
   }
-  await db.whoop.bulkPut([...byCycle.values()]);
-  await db.settings.put({ key: 'whoop_sync', value: { at: Date.now() } });
+  const rows = [...byDate.values()].map((x) => x.d);
+  const fromKey = localKey(start);
+  await db.transaction('rw', db.whoop, db.settings, async () => {
+    // при пересчёте привязки убираем старые строки, иначе останутся дни со сдвигом
+    if (full) await db.whoop.where('date').aboveOrEqual(fromKey).delete();
+    await db.whoop.bulkPut(rows);
+    await db.settings.put({ key: 'whoop_sync', value: { at: Date.now(), v: MAP_V } });
+  });
 }
 
 export async function disconnectWhoop() {

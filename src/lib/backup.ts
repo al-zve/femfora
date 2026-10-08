@@ -30,7 +30,10 @@ export async function exportBackup(password: string) {
     tasks: await db.tasks.toArray(),
     moves: await db.moves.toArray(),
     days: await db.days.toArray(),
-    settings: await db.settings.toArray()
+    // ключи WHOOP в копию не кладём: после восстановления WHOOP подключается заново
+    settings: (await db.settings.toArray()).filter((x) => !x.key.startsWith('whoop_')),
+    whoop: await db.whoop.toArray(),
+    periods: await db.periods.toArray()
   };
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -67,11 +70,13 @@ export async function readBackup(file: File, password: string) {
 }
 
 export async function restoreBackup(payload: Awaited<ReturnType<typeof readBackup>>) {
-  await db.transaction('rw', [db.tasks, db.moves, db.days, db.settings], async () => {
-    await Promise.all([db.tasks.clear(), db.moves.clear(), db.days.clear(), db.settings.clear()]);
+  await db.transaction('rw', [db.tasks, db.moves, db.days, db.settings, db.whoop, db.periods], async () => {
+    await Promise.all([db.tasks.clear(), db.moves.clear(), db.days.clear(), db.settings.clear(), db.whoop.clear(), db.periods.clear()]);
     await db.tasks.bulkAdd(payload.tasks ?? []);
     await db.moves.bulkAdd(payload.moves ?? []);
     await db.days.bulkAdd(payload.days ?? []);
-    await db.settings.bulkAdd(payload.settings ?? []);
+    await db.settings.bulkAdd((payload.settings ?? []).filter((x: { key: string }) => !x.key.startsWith('whoop_')));
+    await db.whoop.bulkAdd(payload.whoop ?? []);
+    await db.periods.bulkAdd(payload.periods ?? []);
   });
 }

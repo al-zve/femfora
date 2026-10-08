@@ -1,15 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useState } from 'react';
+import { PHASE_NAME, PHASE_SHORT, type Phase, dayInfo, phaseRuns } from '../lib/cycle';
+import { useCycle } from '../lib/useCycle';
+import { HEAVY_LOAD, LIGHT_LOAD, recoveryAfterLoad, recoveryByPhase } from '../lib/insights';
+import { CycleCard } from '../components/CycleCard';
 import { db, type WhoopDay } from '../db';
 import { setMood } from '../lib/actions';
 import { ZONE_COLOR, ZONE_LABEL, zoneOf } from '../lib/battery';
-import { DOW_SHORT, addDays, dowIdx, shortDate, toKey } from '../lib/dates';
+import { DOW_SHORT, addDays, daysBetween, dowIdx, plural, shortDate, toKey } from '../lib/dates';
 import { fmtHM } from '../lib/whoop';
 import { WhoopConnect } from '../components/WhoopConnect';
 import { BoltIcon, GearIcon } from '../components/icons';
 import { MoodPicker } from './Today';
 
-type Range = 7 | 30;
+type Range = 7 | 30 | 'cycle';
+type Run = { phase: Phase | null; start: number; count: number };
 
 const STAGES = [
   { key: 'deepMs', label: 'Глубокий', light: '#1C2E9E', dark: '#C5CEFF' },
@@ -31,7 +36,8 @@ function Chart({
   onSel,
   fmt,
   labels,
-  bolt
+  bolt,
+  runs
 }: {
   title: string;
   values: (number | undefined)[];
@@ -44,6 +50,7 @@ function Chart({
   fmt: (v: number) => string;
   labels: string[];
   bolt?: boolean;
+  runs: Run[];
 }) {
   const n = values.length;
   const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
@@ -75,6 +82,11 @@ function Chart({
         </span>
       </div>
       <div style={{ position: 'relative', height: 72, borderBottom: '1px solid var(--line)' }}>
+        {runs.map((r, i) =>
+          r.phase && i % 2 === 0 ? (
+            <span key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `${(r.start / n) * 100}%`, width: `${(r.count / n) * 100}%`, background: 'var(--band)' }} />
+          ) : null
+        )}
         <span
           style={{
             position: 'absolute',
@@ -144,18 +156,45 @@ function Chart({
   );
 }
 
-export function Health({ today, openSettings }: { today: string; openSettings: () => void }) {
-  const [range, setRange] = useState<Range>(7);
+export function Health({
+  today,
+  openSettings,
+  openCycle,
+  notify
+}: {
+  today: string;
+  openSettings: () => void;
+  openCycle: () => void;
+  notify: (t: string) => void;
+}) {
+  const [rangeRaw, setRange] = useState<Range>(7);
   const [selRaw, setSel] = useState<number | null>(null);
-  const from = addDays(today, -(range - 1));
+  const cycle = useCycle();
+  const info = cycle ? dayInfo(cycle, today) : null;
+  const range: Range = rangeRaw === 'cycle' && !info ? 7 : rangeRaw;
+  // «Цикл»: с начала текущего цикла; если он только начался — вместе с прошлым
+  let cycleFrom = info?.cycleStart ?? today;
+  if (info && info.day < 7 && cycle) {
+    const prev = cycle.starts.filter((s) => s < info.cycleStart).pop();
+    if (prev && daysBetween(prev, info.cycleStart) <= 60) cycleFrom = prev;
+  }
+  const days = range === 'cycle' ? daysBetween(cycleFrom, today) + 1 : range;
+  const from = addDays(today, -(days - 1));
   const day = useLiveQuery(() => db.days.get(today), [today]);
   const auth = useLiveQuery(() => db.settings.get('whoop_auth'));
   const whoopRows = useLiveQuery(() => db.whoop.where('date').between(addDays(from, -1), today, true, true).toArray(), [from, today]);
   const moods = useLiveQuery(() => db.days.where('date').between(from, today, true, true).toArray(), [from, today]);
   const doneTasks = useLiveQuery(() => db.tasks.filter((t) => t.done).toArray(), []);
+  const allWhoop = useLiveQuery(() => db.whoop.toArray(), []);
 
-  const dates = Array.from({ length: range }, (_, i) => addDays(from, i));
-  const sel = selRaw == null || selRaw >= range ? range - 1 : selRaw;
+  const dates = Array.from({ length: days }, (_, i) => addDays(from, i));
+  const sel = selRaw == null || selRaw >= days ? days - 1 : selRaw;
+  const runs: Run[] = cycle ? phaseRuns(cycle, dates) : [{ phase: null, start: 0, count: days }];
+  const hasPhases = runs.some((r) => r.phase);
+  const selInfo = cycle ? dayInfo(cycle, dates[sel]) : null;
+  const usedPhases = (['menstrual', 'follicular', 'ovulatory', 'luteal'] as Phase[]).filter((p) => runs.some((r) => r.phase === p));
+  const byPhase = cycle && allWhoop ? recoveryByPhase(cycle, allWhoop) : null;
+  const afterLoad = doneTasks && allWhoop ? recoveryAfterLoad(doneTasks, allWhoop) : null;
   const w = new Map<string, WhoopDay>((whoopRows ?? []).map((r) => [r.date, r]));
   const moodBy = new Map((moods ?? []).map((d) => [d.date, d.mood]));
   const loadBy = new Map<string, number>();
@@ -263,38 +302,112 @@ export function Health({ today, openSettings }: { today: string; openSettings: (
         <div className="section-head" style={{ alignItems: 'center' }}>
           <h2>Динамика</h2>
           <div className="seg">
-            {([7, 30] as Range[]).map((r) => (
-              <button key={r} aria-pressed={range === r} onClick={() => setRange(r)} style={{ height: 36, fontSize: 14 }}>
-                {r} дней
+            {([7, 30, ...(info ? ['cycle'] : [])] as Range[]).map((r) => (
+              <button
+                key={r}
+                aria-pressed={range === r}
+                onClick={() => {
+                  setRange(r);
+                  setSel(null);
+                }}
+                style={{ height: 36, fontSize: 14, padding: '0 10px' }}
+              >
+                {r === 'cycle' ? 'Цикл' : `${r} дней`}
               </button>
             ))}
           </div>
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ fontSize: 16, fontWeight: 800 }}>
-              {dates[sel] === today ? 'Сегодня' : DOW_SHORT[dowIdx(dates[sel])]}, {shortDate(dates[sel])}
-            </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                {dates[sel] === today ? 'Сегодня' : DOW_SHORT[dowIdx(dates[sel])]}, {shortDate(dates[sel])}
+              </span>
+              {selInfo && (
+                <span className="sub" style={{ textAlign: 'right' }}>
+                  день {selInfo.day}, {PHASE_NAME[selInfo.phase]}
+                </span>
+              )}
+            </div>
+            {hasPhases && (
+              <div className="band-strip" aria-hidden="true">
+                {runs.map((r, i) =>
+                  r.phase ? (
+                    <span key={i} style={{ left: `${(r.start / days) * 100}%`, width: `${(r.count / days) * 100}%` }}>
+                      <span style={{ background: i % 2 === 0 ? 'var(--field)' : 'var(--chip-b)' }}>{PHASE_SHORT[r.phase]}</span>
+                    </span>
+                  ) : null
+                )}
+              </div>
+            )}
             <div className="caption" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 500, fontSize: 12 }}>
               <span>{labels[0]}</span>
               <span>{labels[labels.length - 1]}</span>
             </div>
           </div>
-          <Chart title="Recovery" kind="line" color={col.rec} min={0} max={100} values={dates.map((d) => w.get(d)?.recovery)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)}%`} labels={labels} />
-          <Chart title="Нагрузка задач" kind="bar" color={col.pink} min={0} max={10} values={dates.map((d) => loadBy.get(d) ?? 0)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} bolt />
-          <Chart title="Сон" kind="bar" color={col.blue} min={0} max={10 * 3600_000} values={dates.map((d) => w.get(d)?.sleepMs)} sel={sel} onSel={setSel} fmt={(v) => fmtHM(v)} labels={labels} />
-          <Chart title="Самочувствие" kind="bar" color={col.pink} min={0} max={5} values={dates.map((d) => moodBy.get(d))} sel={sel} onSel={setSel} fmt={(v) => (Math.round(v * 10) / 10).toString().replace('.', ',')} labels={labels} />
-          <Chart title="HRV" kind="line" color={col.blue} min={20} max={110} values={dates.map((d) => w.get(d)?.hrv)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)} мс`} labels={labels} />
-          <Chart title="Пульс покоя" kind="line" color={col.pink} min={40} max={80} values={dates.map((d) => w.get(d)?.rhr)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v))} labels={labels} />
-          <Chart title="Strain" kind="bar" color={col.blue} min={0} max={21} values={dates.map((d) => w.get(d)?.strain)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} />
+          <Chart title="Recovery" kind="line" color={col.rec} min={0} max={100} values={dates.map((d) => w.get(d)?.recovery)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)}%`} labels={labels} runs={runs} />
+          <Chart title="Нагрузка задач" kind="bar" color={col.pink} min={0} max={10} values={dates.map((d) => loadBy.get(d) ?? 0)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} runs={runs} bolt />
+          <Chart title="Сон" kind="bar" color={col.blue} min={0} max={10 * 3600_000} values={dates.map((d) => w.get(d)?.sleepMs)} sel={sel} onSel={setSel} fmt={(v) => fmtHM(v)} labels={labels} runs={runs} />
+          <Chart title="Самочувствие" kind="bar" color={col.pink} min={0} max={5} values={dates.map((d) => moodBy.get(d))} sel={sel} onSel={setSel} fmt={(v) => (Math.round(v * 10) / 10).toString().replace('.', ',')} labels={labels} runs={runs} />
+          <Chart title="HRV" kind="line" color={col.blue} min={20} max={110} values={dates.map((d) => w.get(d)?.hrv)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)} мс`} labels={labels} runs={runs} />
+          <Chart title="Пульс покоя" kind="line" color={col.pink} min={40} max={80} values={dates.map((d) => w.get(d)?.rhr)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v))} labels={labels} runs={runs} />
+          <Chart title="Strain" kind="bar" color={col.blue} min={0} max={21} values={dates.map((d) => w.get(d)?.strain)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} runs={runs} />
+          {hasPhases && (
+            <span className="caption" style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.4 }}>
+              Фазы: {usedPhases.map((p) => `${PHASE_SHORT[p]} ${PHASE_NAME[p]}`).join(', ')}
+            </span>
+          )}
         </div>
       </section>
 
-      <section className="section">
-        <h2>Цикл</h2>
-        <div className="empty dashed" style={{ padding: 20, lineHeight: 1.4 }}>
-          Скоро здесь появятся календарь цикла и прогноз месячных
+      <section className="section" id="cycle" style={{ scrollMarginTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
+        <div className="section-head">
+          <h2>Цикл</h2>
+          {info && (
+            <button className="btn-text" style={{ minHeight: 32 }} onClick={openCycle}>
+              день {info.day}, {PHASE_NAME[info.phase]}
+            </button>
+          )}
         </div>
+        {cycle && <CycleCard model={cycle} today={today} notify={notify} />}
+      </section>
+
+      <section className="section">
+        <h2>Наблюдения</h2>
+        {byPhase && (
+          <div className="insight">
+            <span>
+              Recovery в лютеиновой фазе в среднем {byPhase.luteal}%, в фолликулярной — {byPhase.follicular}%
+            </span>
+            <span className="caption" style={{ fontWeight: 500 }}>
+              по {byPhase.cycles} {plural(byPhase.cycles, 'циклу', 'циклам', 'циклам')}, {byPhase.days} {plural(byPhase.days, 'день', 'дня', 'дней')} с данными WHOOP
+            </span>
+          </div>
+        )}
+        {afterLoad && (
+          <div className="insight">
+            <span>
+              После насыщенных дней (от {HEAVY_LOAD} молний) recovery наутро в среднем {afterLoad.heavy}%, после лёгких (до {LIGHT_LOAD}) — {afterLoad.light}%
+            </span>
+            <span className="caption" style={{ fontWeight: 500 }}>
+              по {afterLoad.days} {plural(afterLoad.days, 'дню', 'дням', 'дням')}
+            </span>
+          </div>
+        )}
+        {(!byPhase || !afterLoad) && (
+          <div className="empty dashed" style={{ padding: '14px 16px', lineHeight: 1.4, alignItems: 'flex-start', textAlign: 'left' }}>
+            {!byPhase && !afterLoad
+              ? 'Здесь появятся закономерности по твоим данным: как меняется recovery по фазам цикла и после насыщенных дней. Нужно хотя бы 2 отмеченных цикла и пара недель с задачами.'
+              : !byPhase
+                ? 'Recovery по фазам цикла: нужно хотя бы 2 завершённых цикла с данными WHOOP.'
+                : 'Нагрузка и recovery: нужно больше дней с выполненными задачами.'}
+          </div>
+        )}
+        {(byPhase || afterLoad) && (
+          <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+            Это средние по твоим данным, они показывают связь, но не причину.
+          </span>
+        )}
       </section>
     </div>
   );

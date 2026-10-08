@@ -73,6 +73,12 @@ export interface WhoopDay {
   updatedAt: number;
 }
 
+/** отметка начала месячных */
+export interface Period {
+  start: string;
+  createdAt: number;
+}
+
 export interface Setting {
   key: string;
   value: unknown;
@@ -84,6 +90,7 @@ class FemForaDB extends Dexie {
   days!: Table<Day, string>;
   settings!: Table<Setting, string>;
   whoop!: Table<WhoopDay, string>;
+  periods!: Table<Period, string>;
 
   constructor() {
     super('femfora');
@@ -95,6 +102,9 @@ class FemForaDB extends Dexie {
     });
     this.version(2).stores({
       whoop: 'date, cycleId'
+    });
+    this.version(3).stores({
+      periods: 'start'
     });
   }
 }
