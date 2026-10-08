@@ -389,6 +389,8 @@ textarea.input { height: auto; padding: 12px 14px; resize: none; line-height: 1.
   animation: ffSheetUp 0.42s cubic-bezier(0.22, 1, 0.36, 1);
   overscroll-behavior: contain;
 }
+/* элементы шторки не сжимаются, когда содержимое выше экрана, — шторка прокручивается */
+.sheet > * { flex-shrink: 0; }
 .sheet-head {
   position: sticky; top: 0; z-index: 2; margin: 0 -20px; padding: 8px 20px 10px;
   background: var(--surface); display: flex; flex-direction: column; gap: 8px;
