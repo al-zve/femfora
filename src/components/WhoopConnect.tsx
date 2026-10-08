@@ -61,7 +61,7 @@ export function WhoopConnect() {
       <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, fontWeight: 500, lineHeight: 1.4, color: 'var(--muted)' }}>
         <li>Открой Safari и вставь ссылку в адресную строку.</li>
         <li>Войди в WHOOP и нажми GRANT.</li>
-        <li>Вернись сюда: через пару секунд здесь появится «обновлено», а во «Здоровье» — твои данные.</li>
+        <li>Вернись сюда: через пару секунд здесь появится «обновлено», а на вкладке «Здоровье» — твои данные.</li>
       </ol>
       <span className="caption" style={{ fontWeight: 500 }}>
         Ссылка действует 15 минут

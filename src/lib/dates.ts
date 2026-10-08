@@ -28,6 +28,9 @@ export const shortDate = (k: string) => {
   const d = fromKey(k);
   return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
 };
+/** «с 5 окт», но «со 2 окт» */
+export const fromDate = (k: string) => `${fromKey(k).getDate() === 2 ? 'со' : 'с'} ${shortDate(k)}`;
+
 export const monthTitle = (y: number, m: number) => `${MONTHS_NOM[m]} ${y}`;
 export const dayNum = (k: string) => fromKey(k).getDate();
 

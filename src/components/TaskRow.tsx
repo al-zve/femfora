@@ -1,15 +1,15 @@
 import type { Task } from '../db';
-import { shortDate } from '../lib/dates';
+import { fromDate, plural, shortDate } from '../lib/dates';
 import { Bolts } from './Bolts';
 import { CheckIcon } from './icons';
 
 export function taskMeta(t: Task, today: string) {
   const parts: string[] = [];
   if (t.time) parts.push(t.time);
-  if (t.date < today && !t.done) parts.push(`с ${shortDate(t.date)}`);
+  if (t.date < today && !t.done) parts.push(fromDate(t.date));
   if (t.deadline) parts.push(`до ${shortDate(t.deadline)}`);
   if (t.subs.length) parts.push(`подзадачи ${t.subs.filter((s) => s.done).length}/${t.subs.length}`);
-  if (t.comments.length) parts.push(`${t.comments.length} комм.`);
+  if (t.comments.length) parts.push(`${t.comments.length} ${plural(t.comments.length, 'комментарий', 'комментария', 'комментариев')}`);
   return parts.join(' · ');
 }
 

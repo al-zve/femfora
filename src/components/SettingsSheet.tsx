@@ -33,7 +33,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   };
 
   const doExport = async () => {
-    if (pw.length < 8) return setError('Пароль минимум 8 символов');
+    if (pw.length < 8) return setError('Пароль должен быть не короче 8 символов');
     if (pw !== pw2) return setError('Пароли не совпадают');
     setBusy(true);
     setError('');
@@ -159,7 +159,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
             <input id="bk-pw" type="password" className="input" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
           </div>
           <div className="field">
-            <label htmlFor="bk-pw2">Ещё раз</label>
+            <label htmlFor="bk-pw2">Повтори пароль</label>
             <input id="bk-pw2" type="password" className="input" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
           </div>
           {error && <span className="error-text">{error}</span>}

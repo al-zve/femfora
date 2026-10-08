@@ -15,7 +15,7 @@ const STAGES = [
   { key: 'deepMs', label: 'Глубокий', light: '#1C2E9E', dark: '#C5CEFF' },
   { key: 'remMs', label: 'REM', light: '#3F58DE', dark: '#8B9CF6' },
   { key: 'lightMs', label: 'Лёгкий', light: '#8C9DF2', dark: '#5068E0' },
-  { key: 'awakeMs', label: 'Без сна', light: '#D3DAFB', dark: '#2E3870' }
+  { key: 'awakeMs', label: 'Бодрствование', light: '#D3DAFB', dark: '#2E3870' }
 ] as const;
 
 const isDark = () => document.documentElement.dataset.theme === 'dark';
@@ -186,7 +186,7 @@ export function Health({ today, openSettings }: { today: string; openSettings: (
         {!auth && !night ? (
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span className="sub" style={{ fontWeight: 500, lineHeight: 1.45 }}>
-              Подключи WHOOP, чтобы видеть recovery, сон, HRV и пульс и чтобы заряд дня считался по ним.
+              Подключи WHOOP: здесь появятся recovery, сон, HRV и пульс, а заряд дня будет считаться по ним.
             </span>
             <WhoopConnect />
 
@@ -293,7 +293,7 @@ export function Health({ today, openSettings }: { today: string; openSettings: (
       <section className="section">
         <h2>Цикл</h2>
         <div className="empty dashed" style={{ padding: 20, lineHeight: 1.4 }}>
-          Календарь цикла, прогноз и импорт из Maya появятся на следующем этапе
+          Скоро здесь появятся календарь цикла и прогноз месячных
         </div>
       </section>
     </div>
