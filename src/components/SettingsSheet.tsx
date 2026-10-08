@@ -32,7 +32,8 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const [updating, setUpdating] = useState(false);
   const check = () => {
     setRemote(undefined);
-    serverVersion().then(setRemote);
+    // короткая пауза, чтобы было видно, что проверка прошла
+    Promise.all([serverVersion(), new Promise((r) => setTimeout(r, 500))]).then(([v]) => setRemote(v));
   };
   useEffect(check, []);
   const hasUpdate = !!remote && isNewer(remote, __APP_VERSION__);
@@ -251,26 +252,22 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
         <span className="caption" style={{ fontWeight: 500 }}>
           FemFora {__APP_VERSION__}
-          {remote === undefined ? ' · проверяю обновления…' : remote === null ? ' · нет связи с сервером' : hasUpdate ? ` · есть ${remote}` : ' · последняя версия'}
+          {remote === undefined ? '' : remote === null ? ' · нет связи с сервером' : hasUpdate ? ` · есть ${remote}` : ' · последняя версия'}
         </span>
-        {hasUpdate ? (
-          <button
-            className="btn-text"
-            disabled={updating}
-            onClick={() => {
+        {/* кнопка всегда на месте, чтобы окно не прыгало во время проверки */}
+        <button
+          className="btn-text"
+          disabled={remote === undefined || updating}
+          style={hasUpdate ? undefined : { color: 'var(--muted)' }}
+          onClick={() => {
+            if (hasUpdate) {
               setUpdating(true);
               applyUpdate();
-            }}
-          >
-            {updating ? 'Обновляю…' : `Обновить до ${remote}`}
-          </button>
-        ) : (
-          remote !== undefined && (
-            <button className="btn-text" style={{ color: 'var(--muted)' }} onClick={check}>
-              Проверить ещё раз
-            </button>
-          )
-        )}
+            } else check();
+          }}
+        >
+          {updating ? 'Обновляю…' : remote === undefined ? 'Проверяю…' : hasUpdate ? `Обновить до ${remote}` : 'Проверить ещё раз'}
+        </button>
       </div>
     </Sheet>
   );
