@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { db } from '../db';
 import { disconnectWhoop, syncWhoop } from '../lib/whoop';
 import { WhoopConnect } from './WhoopConnect';
+import { WhoopCheck } from './WhoopCheck';
 import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
 import { Sheet } from './Sheet';
@@ -13,7 +14,7 @@ import { plural } from '../lib/dates';
 export type ThemePref = 'light' | 'dark' | 'system';
 
 export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; onClose: () => void; onNotice: (t: string) => void }) {
-  const [mode, setMode] = useState<'menu' | 'export' | 'import'>('menu');
+  const [mode, setMode] = useState<'menu' | 'export' | 'import' | 'whoop'>('menu');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -70,7 +71,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   };
 
   return (
-    <Sheet title="Настройки" onClose={onClose}>
+    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : 'Настройки'} onClose={onClose}>
       {mode === 'menu' && (
         <>
           <div className="field">
@@ -124,6 +125,11 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
                   </span>
                 ) : null}
               </div>
+              {whoopAuth && (
+                <button className="list-row" onClick={() => setMode('whoop')}>
+                  Проверка данных WHOOP <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
+                </button>
+              )}
               {!whoopAuth && (
                 <div style={{ padding: '4px 0 14px', borderBottom: '1px solid var(--line)' }}>
                   <WhoopConnect />
@@ -175,6 +181,8 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
           </div>
         </>
       )}
+
+      {mode === 'whoop' && <WhoopCheck onBack={reset} onNotice={onNotice} />}
 
       {mode === 'export' && (
         <>

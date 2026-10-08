@@ -23,6 +23,21 @@ const STAGES = [
   { key: 'awakeMs', label: 'Бодрствование', light: '#D3DAFB', dark: '#2E3870' }
 ] as const;
 
+/** шкала по данным с запасом, чтобы линия не упиралась в край */
+function axis(values: (number | undefined)[], minSpan: number, fallback: [number, number]) {
+  const v = values.filter((x): x is number => x != null);
+  if (!v.length) return { min: fallback[0], max: fallback[1] };
+  let a = Math.min(...v);
+  let b = Math.max(...v);
+  if (b - a < minSpan) {
+    const mid = (a + b) / 2;
+    a = mid - minSpan / 2;
+    b = mid + minSpan / 2;
+  }
+  const pad = (b - a) * 0.15;
+  return { min: Math.max(0, Math.floor((a - pad) / 5) * 5), max: Math.ceil((b + pad) / 5) * 5 };
+}
+
 const isDark = () => document.documentElement.dataset.theme === 'dark';
 
 function Chart({
@@ -37,7 +52,8 @@ function Chart({
   fmt,
   labels,
   bolt,
-  runs
+  runs,
+  gap
 }: {
   title: string;
   values: (number | undefined)[];
@@ -51,6 +67,8 @@ function Chart({
   labels: string[];
   bolt?: boolean;
   runs: Run[];
+  /** подпись для дня без данных, например «нет данных» */
+  gap?: string;
 }) {
   const n = values.length;
   const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
@@ -58,14 +76,21 @@ function Chart({
   const avg = present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
   const cur = values[sel];
 
-  // линия рвётся там, где нет данных
+  // точки линии; там, где дня нет, соединяем соседние точки пунктиром
+  const pts = values
+    .map((v, i) => (v == null ? null : { i, x: ((i + 0.5) / n) * 100, y: 100 - pct(v) }))
+    .filter((p): p is { i: number; x: number; y: number } => p != null);
   const segments: string[] = [];
+  const bridges: { x1: number; y1: number; x2: number; y2: number }[] = [];
   let seg: string[] = [];
-  values.forEach((v, i) => {
-    if (v == null) {
+  pts.forEach((p, k) => {
+    const prev = pts[k - 1];
+    if (prev && p.i - prev.i > 1) {
       if (seg.length) segments.push(seg.join(' '));
       seg = [];
-    } else seg.push(`${(((i + 0.5) / n) * 100).toFixed(2)},${(100 - pct(v)).toFixed(2)}`);
+      bridges.push({ x1: prev.x, y1: prev.y, x2: p.x, y2: p.y });
+    }
+    seg.push(`${p.x.toFixed(2)},${p.y.toFixed(2)}`);
   });
   if (seg.length) segments.push(seg.join(' '));
 
@@ -77,7 +102,7 @@ function Chart({
           {avg != null && <span className="caption" style={{ fontWeight: 500 }}>ср. {fmt(avg)}</span>}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 16, fontWeight: 800 }}>
-          {cur != null ? fmt(cur) : '—'}
+          {cur != null ? fmt(cur) : gap ? <span className="sub" style={{ fontSize: 14 }}>{gap}</span> : '—'}
           {bolt && cur != null && <BoltIcon size={13} color="var(--bolt)" />}
         </span>
       </div>
@@ -119,8 +144,11 @@ function Chart({
         ) : (
           <>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }} aria-hidden="true">
-              {segments.map((pts, i) => (
-                <polyline key={i} points={pts} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+              {segments.map((p, i) => (
+                <polyline key={i} points={p} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+              ))}
+              {bridges.map((b, i) => (
+                <line key={`b${i}`} x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={color} strokeWidth={1.5} strokeDasharray="3 4" opacity={0.6} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
               ))}
             </svg>
             {cur != null && (
@@ -209,6 +237,8 @@ export function Health({
   const dark = isDark();
   const stageTotal = night ? STAGES.reduce((s, st) => s + (night[st.key] ?? 0), 0) : 0;
   const labels = dates.map((d) => shortDate(d));
+  const hrvVals = dates.map((d) => w.get(d)?.hrv);
+  const rhrVals = dates.map((d) => w.get(d)?.rhr);
   const col = { rec: dark ? '#2CC6C6' : '#00A3A3', pink: dark ? '#EA6BBB' : '#E0218A', blue: dark ? '#8B9CF6' : '#3F58DE' };
 
   return (
@@ -345,13 +375,13 @@ export function Health({
               <span>{labels[labels.length - 1]}</span>
             </div>
           </div>
-          <Chart title="Recovery" kind="line" color={col.rec} min={0} max={100} values={dates.map((d) => w.get(d)?.recovery)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)}%`} labels={labels} runs={runs} />
+          <Chart title="Recovery" kind="line" color={col.rec} min={0} max={100} values={dates.map((d) => w.get(d)?.recovery)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)}%`} labels={labels} runs={runs} gap="нет данных" />
           <Chart title="Нагрузка задач" kind="bar" color={col.pink} min={0} max={10} values={dates.map((d) => loadBy.get(d) ?? 0)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} runs={runs} bolt />
-          <Chart title="Сон" kind="bar" color={col.blue} min={0} max={10 * 3600_000} values={dates.map((d) => w.get(d)?.sleepMs)} sel={sel} onSel={setSel} fmt={(v) => fmtHM(v)} labels={labels} runs={runs} />
+          <Chart title="Сон" kind="bar" color={col.blue} min={0} max={10 * 3600_000} values={dates.map((d) => w.get(d)?.sleepMs)} sel={sel} onSel={setSel} fmt={(v) => fmtHM(v)} labels={labels} runs={runs} gap="нет данных" />
           <Chart title="Самочувствие" kind="bar" color={col.pink} min={0} max={5} values={dates.map((d) => moodBy.get(d))} sel={sel} onSel={setSel} fmt={(v) => (Math.round(v * 10) / 10).toString().replace('.', ',')} labels={labels} runs={runs} />
-          <Chart title="HRV" kind="line" color={col.blue} min={20} max={110} values={dates.map((d) => w.get(d)?.hrv)} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)} мс`} labels={labels} runs={runs} />
-          <Chart title="Пульс покоя" kind="line" color={col.pink} min={40} max={80} values={dates.map((d) => w.get(d)?.rhr)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v))} labels={labels} runs={runs} />
-          <Chart title="Strain" kind="bar" color={col.blue} min={0} max={21} values={dates.map((d) => w.get(d)?.strain)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} runs={runs} />
+          <Chart title="HRV" kind="line" color={col.blue} {...axis(hrvVals, 30, [20, 110])} values={hrvVals} sel={sel} onSel={setSel} fmt={(v) => `${Math.round(v)} мс`} labels={labels} runs={runs} gap="нет данных" />
+          <Chart title="Пульс покоя" kind="line" color={col.pink} {...axis(rhrVals, 15, [40, 80])} values={rhrVals} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v))} labels={labels} runs={runs} gap="нет данных" />
+          <Chart title="Strain" kind="bar" color={col.blue} min={0} max={21} values={dates.map((d) => w.get(d)?.strain)} sel={sel} onSel={setSel} fmt={(v) => String(Math.round(v * 10) / 10).replace('.', ',')} labels={labels} runs={runs} gap="нет данных" />
           {hasPhases && (
             <span className="caption" style={{ fontWeight: 500, fontSize: 12, lineHeight: 1.4 }}>
               Фазы: {usedPhases.map((p) => `${PHASE_SHORT[p]} ${PHASE_NAME[p]}`).join(', ')}
