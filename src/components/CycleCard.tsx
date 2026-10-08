@@ -94,6 +94,12 @@ export function CycleCard({ model, today, notify }: { model: CycleModel; today: 
         )}
       </div>
 
+      {canMarkToday && (
+        <button className="btn btn-secondary" onClick={() => tap(today)}>
+          Месячные начались сегодня
+        </button>
+      )}
+
       {hasData && (
         <>
           <div className="divider" />
@@ -130,11 +136,6 @@ export function CycleCard({ model, today, notify }: { model: CycleModel; today: 
         </>
       )}
 
-      {canMarkToday && (
-        <button className="btn btn-secondary" onClick={() => tap(today)}>
-          Месячные начались сегодня
-        </button>
-      )}
     </div>
   );
 }
