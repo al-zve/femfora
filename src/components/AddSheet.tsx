@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Energy, ListId } from '../db';
 import { addTask } from '../lib/actions';
 import { DOW_SHORT, addDays, dowIdx, shortDate } from '../lib/dates';
 import { bestDay, budgetFor, loadOn } from '../lib/plan';
 import { usePlan } from '../lib/usePlan';
 import { estimateEnergy } from '../lib/estimate';
+import { useExamples } from '../lib/useExamples';
 import { Load } from './Bolts';
 import { Sheet } from './Sheet';
 import { BoltIcon } from './icons';
@@ -16,9 +17,22 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
   const [list, setList] = useState<ListId>('personal');
   const [date, setDate] = useState(defaultDate);
   const [hint, setHint] = useState('');
+  // после «Оценить» оценка пересчитывается, когда меняется число подзадач; ручной выбор это выключает
+  const [auto, setAuto] = useState(false);
+  const subsCount = subs.split('\n').filter((x) => x.trim()).length;
   const tomorrow = addDays(today, 1);
   const isOther = date !== today && date !== tomorrow;
   const plan = usePlan(today);
+  const examples = useExamples();
+  const estimate = () => {
+    const r = estimateEnergy(title, subsCount, examples);
+    setEnergy(r.energy);
+    setHint(r.reason);
+  };
+  useEffect(() => {
+    if (auto && title.trim()) estimate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subsCount]);
   const dayLoad = plan ? loadOn(plan, date) : 0;
   const dayBudget = plan ? budgetFor(plan, date) : 0;
   const over = !!plan && dayLoad + energy > dayBudget;
@@ -86,9 +100,8 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
             disabled={!title.trim()}
             style={{ opacity: title.trim() ? 1 : 0.4 }}
             onClick={() => {
-              const r = estimateEnergy(title, subs.split('\n').filter((x) => x.trim()).length);
-              setEnergy(r.energy);
-              setHint(r.reason);
+              setAuto(true);
+              estimate();
             }}
           >
             Оценить
@@ -104,6 +117,7 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
               onClick={() => {
                 setEnergy(v);
                 setHint('');
+                setAuto(false);
               }}
             >
               {Array.from({ length: v }, (_, i) => (

@@ -5,6 +5,8 @@ import { db } from '../db';
 import { disconnectWhoop, syncWhoop } from '../lib/whoop';
 import { WhoopConnect } from './WhoopConnect';
 import { WhoopCheck } from './WhoopCheck';
+import { Calibrate } from './Calibrate';
+import { CALIBRATION } from '../lib/estimate';
 import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
 import { Sheet } from './Sheet';
@@ -15,7 +17,7 @@ import { plural } from '../lib/dates';
 export type ThemePref = 'light' | 'dark' | 'system';
 
 export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; onClose: () => void; onNotice: (t: string) => void }) {
-  const [mode, setMode] = useState<'menu' | 'export' | 'import' | 'whoop'>('menu');
+  const [mode, setMode] = useState<'menu' | 'export' | 'import' | 'whoop' | 'calib'>('menu');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -24,6 +26,8 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const whoopAuth = useLiveQuery(() => db.settings.get('whoop_auth'));
   const whoopSync = useLiveQuery(() => db.settings.get('whoop_sync'));
   const whoopError = useLiveQuery(() => db.settings.get('whoop_error'));
+  const calib = useLiveQuery(() => db.settings.get('energy_calib'))?.value as Record<string, number> | undefined;
+  const calibCount = Object.keys(calib ?? {}).filter((t) => CALIBRATION.includes(t)).length;
   const periodSetting = useLiveQuery(() => db.settings.get('period_len'));
   const periodLen = typeof periodSetting?.value === 'number' ? periodSetting.value : DEFAULT_PERIOD;
 
@@ -81,7 +85,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   };
 
   return (
-    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : 'Настройки'} onClose={onClose}>
+    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : mode === 'calib' ? 'Научить оценку' : 'Настройки'} onClose={onClose}>
       {mode === 'menu' && (
         <>
           <div className="field">
@@ -153,6 +157,19 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
           </div>
 
           <div className="field">
+            <span className="label">Оценка нагрузки</span>
+            <div className="list-box">
+              <button className="list-row" onClick={() => setMode('calib')}>
+                Научить оценку
+                <span className="val" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {calibCount ? `${calibCount} из ${CALIBRATION.length}` : 'не пройдено'}
+                  <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="field">
             <span className="label">Цикл</span>
             <div className="list-box">
               <div className="list-row">
@@ -193,6 +210,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
       )}
 
       {mode === 'whoop' && <WhoopCheck onBack={reset} onNotice={onNotice} />}
+      {mode === 'calib' && <Calibrate onBack={reset} />}
 
       {mode === 'export' && (
         <>

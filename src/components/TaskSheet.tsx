@@ -4,6 +4,7 @@ import { db, uid, type Energy, type ListId, type Task } from '../db';
 import { deleteTask, moveTask, updateTask } from '../lib/actions';
 import { addDays, shortDate } from '../lib/dates';
 import { Sheet } from './Sheet';
+import { subtasksBump } from '../lib/estimate';
 import { BoltIcon, CheckIcon, SendIcon } from './icons';
 
 export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today: string; onClose: () => void; onNotice: (t: string) => void }) {
@@ -14,9 +15,13 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const timer = useRef<number>(0);
+  // сколько подзадач было при открытии: подсказка появляется, только если их добавили сейчас
+  const initialSubs = useRef<number | null>(null);
+  const [energyTouched, setEnergyTouched] = useState(false);
 
   useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
+    if (task && initialSubs.current === null) initialSubs.current = task.subs.length;
     if (task && title === null) setTitle(task.title);
   }, [task, title]);
 
@@ -57,6 +62,9 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
       Сохранено
     </span>
   );
+
+  const extra = subtasksBump(task.subs.length) - subtasksBump(initialSubs.current ?? task.subs.length);
+  const suggested = !energyTouched && !task.done && extra > 0 && task.energy < 3 ? (Math.min(3, task.energy + extra) as Energy) : null;
 
   return (
     <Sheet title="Задача" onClose={onClose} doneLabel="Готово" headerExtra={pill}>
@@ -135,13 +143,42 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
         <span className="label">Нагрузка</span>
         <div className="grid3">
           {([1, 2, 3] as Energy[]).map((v) => (
-            <button key={v} className="chip" aria-pressed={task.energy === v} aria-label={['', 'Лёгкая', 'Средняя', 'Тяжёлая'][v]} onClick={() => patch({ energy: v })}>
+            <button
+              key={v}
+              className="chip"
+              aria-pressed={task.energy === v}
+              aria-label={['', 'Лёгкая', 'Средняя', 'Тяжёлая'][v]}
+              onClick={() => {
+                setEnergyTouched(true);
+                patch({ energy: v });
+              }}
+            >
               {Array.from({ length: v }, (_, i) => (
                 <BoltIcon key={i} color="var(--bolt)" />
               ))}
             </button>
           ))}
         </div>
+        {suggested && (
+          <div className="inline-row drop" style={{ gap: 8, minHeight: 52 }}>
+            <span className="sub" style={{ fontWeight: 600, lineHeight: 1.35 }}>
+              С {task.subs.length} подзадачами задача, похоже, тяжелее
+            </span>
+            <button
+              className="btn-text"
+              style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 1 }}
+              onClick={() => {
+                setEnergyTouched(true);
+                patch({ energy: suggested });
+              }}
+            >
+              <span style={{ marginRight: 4 }}>Сделать</span>
+              {Array.from({ length: suggested }, (_, k) => (
+                <BoltIcon key={k} size={13} color="var(--bolt)" />
+              ))}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="field">
