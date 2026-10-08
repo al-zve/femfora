@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { applyUpdate, isNewer, serverVersion } from '../lib/update';
 import { db } from '../db';
 import { disconnectWhoop, syncWhoop } from '../lib/whoop';
 import { WhoopConnect } from './WhoopConnect';
@@ -27,6 +28,14 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const periodLen = typeof periodSetting?.value === 'number' ? periodSetting.value : DEFAULT_PERIOD;
 
   const [whoopMsg, setWhoopMsg] = useState('');
+  const [remote, setRemote] = useState<string | null | undefined>(undefined);
+  const [updating, setUpdating] = useState(false);
+  const check = () => {
+    setRemote(undefined);
+    serverVersion().then(setRemote);
+  };
+  useEffect(check, []);
+  const hasUpdate = !!remote && isNewer(remote, __APP_VERSION__);
   const syncedAt = (whoopSync?.value as { at: number } | undefined)?.at;
 
   const reset = () => {
@@ -146,7 +155,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
             <span className="label">Цикл</span>
             <div className="list-box">
               <div className="list-row">
-                Длительность месячных
+                Месячные длятся
                 <span className="stepper">
                   <button aria-label="Меньше" disabled={periodLen <= 2} onClick={() => setSetting('period_len', periodLen - 1)}>
                     −
@@ -239,9 +248,30 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
         </>
       )}
 
-      <span className="caption" style={{ textAlign: 'center', fontWeight: 500 }}>
-        FemFora {__APP_VERSION__}
-      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <span className="caption" style={{ fontWeight: 500 }}>
+          FemFora {__APP_VERSION__}
+          {remote === undefined ? ' · проверяю обновления…' : remote === null ? ' · нет связи с сервером' : hasUpdate ? ` · есть ${remote}` : ' · последняя версия'}
+        </span>
+        {hasUpdate ? (
+          <button
+            className="btn-text"
+            disabled={updating}
+            onClick={() => {
+              setUpdating(true);
+              applyUpdate();
+            }}
+          >
+            {updating ? 'Обновляю…' : `Обновить до ${remote}`}
+          </button>
+        ) : (
+          remote !== undefined && (
+            <button className="btn-text" style={{ color: 'var(--muted)' }} onClick={check}>
+              Проверить ещё раз
+            </button>
+          )
+        )}
+      </div>
     </Sheet>
   );
 }
