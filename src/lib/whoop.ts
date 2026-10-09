@@ -1,5 +1,5 @@
 import { db, type WhoopDay } from '../db';
-import { addDays, daysBetween, todayKey } from './dates';
+import { addDays, todayKey } from './dates';
 
 type Auth = { access: string; refresh: string; expiresAt: number };
 type TokenResponse = { access_token: string; refresh_token: string; expires_in?: number };
@@ -256,8 +256,8 @@ export function assignDays(wanted: string[], edge: string) {
 }
 
 /** Дни за последние 30 дней, где WHOOP-данных нет, хотя до и после они есть */
-async function findGaps(today: string) {
-  const from = addDays(today, -30);
+async function findGaps(today: string, window = 30) {
+  const from = addDays(today, -window);
   const rows = await db.whoop.where('date').between(from, today, true, true).toArray();
   const have = new Set(rows.filter((r) => r.recovery != null || r.sleepMs != null).map((r) => r.date));
   if (!have.size) return [];
@@ -267,23 +267,40 @@ async function findGaps(today: string) {
   return gaps;
 }
 
+interface SyncMeta {
+  at: number;
+  v?: number;
+  fullAt?: number;
+  healAt?: number;
+  healKey?: string;
+  healN?: number;
+}
+
 async function doSync(force: boolean) {
   if (!(await getAuth())) return;
-  const meta = (await db.settings.get('whoop_sync'))?.value as { at: number; v?: number; healAt?: number } | undefined;
-  const full = !meta || meta.v !== MAP_V;
-  if (!force && !full && Date.now() - meta.at < 10 * 60_000) return;
+  const meta = (await db.settings.get('whoop_sync'))?.value as SyncMeta | undefined;
+  const now = Date.now();
+  // Полная перезагрузка 120 дней — то же, что «Обновить всё» в настройках:
+  // при смене привязки дней и раз в сутки
+  let full = !meta || meta.v !== MAP_V || now - (meta.fullAt ?? 0) > 24 * 3600_000;
+  if (!force && !full && meta && now - meta.at < 10 * 60_000) return;
 
   const today = todayKey();
-  let days = full ? 120 : 5;
-  let healAt = meta?.healAt;
-  // самопочинка: если в последних 30 днях есть дыры, раз в 6 часов перезапрашиваем период с запасом
+  let { healKey, healN = 0, healAt } = meta ?? {};
+  // и сразу, если в истории есть пустые дни (не чаще раза в 6 часов).
+  // Если после двух попыток пустые дни те же — значит, у WHOOP за них правда ничего нет, больше не дёргаем.
   if (!full) {
-    const gaps = await findGaps(today);
-    if (gaps.length && (force || !healAt || Date.now() - healAt > 6 * 3600_000)) {
-      days = Math.max(days, daysBetween(gaps[0], today) + 3);
-      healAt = Date.now();
+    const gaps = await findGaps(today, 118);
+    const key = gaps.join(',');
+    const tired = key === healKey && healN >= 2;
+    if (gaps.length && !tired && (force || !healAt || now - healAt > 6 * 3600_000)) {
+      full = true;
+      healN = key === healKey ? healN + 1 : 1;
+      healKey = key;
+      healAt = now;
     }
   }
+  const days = full ? 120 : 5;
   const start = new Date(Date.now() - (days + 1) * 86_400_000).toISOString();
   const cycles = (await all<Cycle>('cycle', start)).sort((a, b) => a.start.localeCompare(b.start));
   const recs = await all<Recovery>('recovery', start);
@@ -308,11 +325,11 @@ async function doSync(force: boolean) {
 
   const edge = addDays(localKey(start), 2); // раньше этой даты не сдвигаем: там могут быть дни вне запроса
   const { dates, keep } = assignDays(wanted, edge);
-  const now = Date.now();
+  const stamp = Date.now();
   const byCycle = new Map<number, WhoopDay>();
   cycles.forEach((c, i) => {
     if (!keep[i]) return;
-    const d: WhoopDay = { date: dates[i], cycleId: c.id, updatedAt: now };
+    const d: WhoopDay = { date: dates[i], cycleId: c.id, updatedAt: stamp };
     if (c.score_state === 'SCORED' && c.score?.strain != null) d.strain = Math.round(c.score.strain * 10) / 10;
     byCycle.set(c.id, d);
   });
@@ -380,7 +397,7 @@ async function doSync(force: boolean) {
     // перезапрошенный период пересобираем целиком, чтобы не оставалось дней со старой привязкой
     await db.whoop.where('date').aboveOrEqual(edge).delete();
     await db.whoop.bulkPut(rows);
-    await db.settings.put({ key: 'whoop_sync', value: { at: Date.now(), v: MAP_V, healAt } });
+    await db.settings.put({ key: 'whoop_sync', value: { at: Date.now(), v: MAP_V, healAt, healKey, healN, fullAt: full ? Date.now() : meta?.fullAt } satisfies SyncMeta });
     await db.settings.put({ key: 'whoop_trace', value: { at: Date.now(), days, items: merged, counts: days >= 30 ? counts : (prevTrace?.counts ?? counts) } satisfies WhoopTraceInfo });
   });
 }
@@ -392,7 +409,7 @@ export async function reloadWhoopHistory() {
   await syncWhoop(true);
 }
 
-export const whoopGaps = () => findGaps(todayKey());
+export const whoopGaps = () => findGaps(todayKey(), 118);
 
 export async function disconnectWhoop() {
   try {

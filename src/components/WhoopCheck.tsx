@@ -60,7 +60,7 @@ export function WhoopCheck({ onBack, onNotice }: { onBack: () => void; onNotice:
       )}
 
       <div className="field">
-        <span className="label">Дни без данных за 30 дней</span>
+        <span className="label">Дни без данных</span>
         {gaps == null ? (
           <div className="inline-row">…</div>
         ) : gaps.length === 0 ? (
@@ -78,6 +78,10 @@ export function WhoopCheck({ onBack, onNotice }: { onBack: () => void; onNotice:
           ))
         )}
       </div>
+
+      <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4, marginTop: -8 }}>
+        Приложение само загружает историю заново раз в сутки и сразу, как находит пустой день. Если день остаётся пустым, значит, WHOOP за него ничего не прислал.
+      </span>
 
       {items.length > 0 && (
         <div className="field">
