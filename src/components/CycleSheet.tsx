@@ -73,7 +73,7 @@ export function CycleSheet({
   const t = PHASE_TEXT[info.phase];
   const canMarkToday = info.day > model.periodLen;
   const sections: [string, string][] = [
-    ['Нагрузка и задачи', t.tasks],
+    ['Задачи', t.tasks],
     ['Спорт', t.sport],
     ['Еда', t.food],
     ['Сон', t.sleep]
@@ -90,7 +90,7 @@ export function CycleSheet({
 
       {info.lateBy > 0 && (
         <div className="proposal" style={{ padding: '12px 16px', fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>
-          Месячные ожидались ≈ {shortDate(nextStart(model)!)}, задержка {info.lateBy} {plural(info.lateBy, 'день', 'дня', 'дней')}. Если они начались, отметь день в календаре.
+          Месячные ожидались примерно {shortDate(nextStart(model)!)}, сейчас задержка {info.lateBy} {plural(info.lateBy, 'день', 'дня', 'дней')}. Длина цикла может немного меняться от месяца к месяцу. Когда месячные начнутся, отметь день в календаре.
         </div>
       )}
 
@@ -106,7 +106,7 @@ export function CycleSheet({
       </div>
 
       <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
-        Фаза посчитана по календарю, поэтому она приблизительная. Это общие данные исследований, а не медицинская рекомендация.
+        Фаза посчитана по датам месячных, поэтому она примерная. Советы основаны на исследованиях, но у каждой женщины всё по-своему, так что доверяй своему самочувствию.
       </span>
 
       <Sources />
