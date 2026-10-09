@@ -155,7 +155,7 @@ export function localKey(iso: string, offset?: string) {
   return new Date(t + mins * 60_000).toISOString().slice(0, 10);
 }
 
-type Cycle = { id: number; start: string; timezone_offset?: string; score_state: string; score?: { strain?: number } };
+type Cycle = { id: number; start: string; end?: string | null; timezone_offset?: string; score_state: string; score?: { strain?: number } };
 type Recovery = {
   cycle_id: number;
   score_state: string;
@@ -193,11 +193,27 @@ const MAP_V = 3;
 
 export interface WhoopTrace {
   cycleStart: string;
+  cycleEnd?: string;
   wake?: string;
   date: string;
+  /** желаемая дата до сдвига */
+  wanted?: string;
   moved: boolean;
   recovery: boolean;
   sleep: boolean;
+  /** статусы оценки WHOOP, без значений */
+  cycleState?: string;
+  recState?: string;
+  sleepState?: string;
+  /** сколько дневных снов (nap) в этом цикле */
+  naps?: number;
+}
+
+export interface WhoopTraceInfo {
+  at: number;
+  days: number;
+  items: WhoopTrace[];
+  counts?: { cycles: number; recoveries: number; sleeps: number; naps: number; orphanSleeps: number };
 }
 
 const localTime = (iso: string, offset?: string) => {
@@ -271,7 +287,8 @@ async function doSync(force: boolean) {
   const start = new Date(Date.now() - (days + 1) * 86_400_000).toISOString();
   const cycles = (await all<Cycle>('cycle', start)).sort((a, b) => a.start.localeCompare(b.start));
   const recs = await all<Recovery>('recovery', start);
-  const sleeps = (await all<Sleep>('sleep', start)).filter((s) => !s.nap);
+  const allSleeps = await all<Sleep>('sleep', start);
+  const sleeps = allSleeps.filter((s) => !s.nap);
 
   // у цикла может быть несколько основных снов: берём самый длинный
   const sleepByCycle = new Map<number, Sleep>();
@@ -325,19 +342,38 @@ async function doSync(force: boolean) {
   }
 
   // для экрана «Проверка данных»: только время и привязка, без показателей; хранится на устройстве
-  const trace: WhoopTrace[] = cycles.slice(-21).map((c) => {
-    const i = cycles.indexOf(c);
+  const recByCycle = new Map(recs.map((r) => [r.cycle_id, r]));
+  const cycleIds = new Set(cycles.map((c) => c.id));
+  const trace: WhoopTrace[] = cycles.map((c, i) => {
     const sl = sleepByCycle.get(c.id);
     const d = byCycle.get(c.id);
     return {
       cycleStart: localTime(c.start, c.timezone_offset),
+      cycleEnd: c.end ? localTime(c.end, c.timezone_offset) : undefined,
       wake: sl ? localTime(sl.end, sl.timezone_offset) : undefined,
       date: d ? dates[i] : '',
+      wanted: wanted[i],
       moved: dates[i] !== wanted[i],
       recovery: d?.recovery != null,
-      sleep: d?.sleepMs != null
+      sleep: d?.sleepMs != null,
+      cycleState: c.score_state,
+      recState: recByCycle.get(c.id)?.score_state,
+      sleepState: sl?.score_state,
+      naps: allSleeps.filter((x) => x.nap && x.cycle_id === c.id).length
     };
   });
+  const counts = {
+    cycles: cycles.length,
+    recoveries: recs.length,
+    sleeps: sleeps.length,
+    naps: allSleeps.length - sleeps.length,
+    orphanSleeps: sleeps.filter((x) => x.cycle_id == null || !cycleIds.has(x.cycle_id)).length
+  };
+
+  // короткая синхронизация не затирает историю для «Проверки данных»: дописываем поверх
+  const prevTrace = (await db.settings.get('whoop_trace'))?.value as WhoopTraceInfo | undefined;
+  const fresh = new Set(trace.map((t) => t.cycleStart));
+  const merged = [...(prevTrace?.items ?? []).filter((t) => !fresh.has(t.cycleStart) && t.cycleStart < (trace[0]?.cycleStart ?? '')), ...trace].slice(-130);
 
   const rows = [...byCycle.values()];
   await db.transaction('rw', db.whoop, db.settings, async () => {
@@ -345,7 +381,7 @@ async function doSync(force: boolean) {
     await db.whoop.where('date').aboveOrEqual(edge).delete();
     await db.whoop.bulkPut(rows);
     await db.settings.put({ key: 'whoop_sync', value: { at: Date.now(), v: MAP_V, healAt } });
-    await db.settings.put({ key: 'whoop_trace', value: { at: Date.now(), days, items: trace } });
+    await db.settings.put({ key: 'whoop_trace', value: { at: Date.now(), days, items: merged, counts: days >= 30 ? counts : (prevTrace?.counts ?? counts) } satisfies WhoopTraceInfo });
   });
 }
 
