@@ -6,6 +6,7 @@ import { disconnectWhoop, syncWhoop } from '../lib/whoop';
 import { WhoopConnect } from './WhoopConnect';
 import { WhoopCheck } from './WhoopCheck';
 import { Calibrate } from './Calibrate';
+import { MayaImport } from './MayaImport';
 import { CALIBRATION } from '../lib/estimate';
 import { setSetting } from '../lib/actions';
 import { exportBackup, readBackup, restoreBackup } from '../lib/backup';
@@ -17,7 +18,7 @@ import { plural } from '../lib/dates';
 export type ThemePref = 'light' | 'dark' | 'system';
 
 export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; onClose: () => void; onNotice: (t: string) => void }) {
-  const [mode, setMode] = useState<'menu' | 'export' | 'import' | 'whoop' | 'calib'>('menu');
+  const [mode, setMode] = useState<'menu' | 'export' | 'import' | 'whoop' | 'calib' | 'maya'>('menu');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -85,7 +86,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   };
 
   return (
-    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : mode === 'calib' ? 'Настроить оценку' : 'Настройки'} onClose={onClose}>
+    <Sheet title={mode === 'whoop' ? 'Данные WHOOP' : mode === 'calib' ? 'Настроить оценку' : mode === 'maya' ? 'Импорт из Maya' : 'Настройки'} onClose={onClose}>
       {mode === 'menu' && (
         <>
           <div className="field">
@@ -186,9 +187,9 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
                   </button>
                 </span>
               </div>
-              <div className="list-row">
-                Импорт из Maya <span className="val">скоро</span>
-              </div>
+              <button className="list-row" onClick={() => setMode('maya')}>
+                Импорт из Maya <ChevronRight size={18} style={{ color: 'var(--muted)' }} />
+              </button>
             </div>
           </div>
 
@@ -211,6 +212,7 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
 
       {mode === 'whoop' && <WhoopCheck onBack={reset} onNotice={onNotice} />}
       {mode === 'calib' && <Calibrate onBack={reset} />}
+      {mode === 'maya' && <MayaImport onBack={reset} onNotice={onNotice} periodLen={periodLen} />}
 
       {mode === 'export' && (
         <>

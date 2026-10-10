@@ -13,6 +13,7 @@ export function CycleCard({ model, today, notify }: { model: CycleModel; today: 
   const marks = marksFor(model, today);
   const hasData = model.starts.length > 0;
   const next = nextStart(model);
+  const lastStart = model.starts[model.starts.length - 1] ?? today;
 
   const shift = (dir: number) =>
     setCursor(({ y, m }) => {
@@ -105,14 +106,19 @@ export function CycleCard({ model, today, notify }: { model: CycleModel; today: 
           <div className="divider" />
           <div className="grid2">
             <div className="metric">
-              <span className="caption">{info && info.lateBy > 0 ? 'Ожидались' : 'Следующие'}</span>
-              <b>{next ? `≈ ${shortDate(next)}` : '—'}</b>
+              <span className="caption">{!info ? 'Последние отмечены' : info.lateBy > 0 ? 'Ожидались' : 'Следующие'}</span>
+              <b>{!info ? `${shortDate(lastStart)}${lastStart.slice(0, 4) !== today.slice(0, 4) ? ` ${lastStart.slice(0, 4)}` : ''}` : next ? `≈ ${shortDate(next)}` : '—'}</b>
             </div>
             <div className="metric">
               <span className="caption">Средний цикл</span>
               <b>{recent.length ? `${model.avgLen} ${plural(model.avgLen, 'день', 'дня', 'дней')}` : '—'}</b>
             </div>
           </div>
+          {!info && (
+            <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4, marginTop: -8 }}>
+              Последняя отметка была давно, поэтому прогноза пока нет. Отметь начало последних месячных, и он снова появится.
+            </span>
+          )}
           {recent.length === 0 && (
             <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4, marginTop: -8 }}>
               Пока прогноз по среднему циклу в 28 дней. Отметь ещё одно начало, и он станет точнее.

@@ -83,6 +83,8 @@ export const nextStart = (m: CycleModel) => (m.starts.length ? addDays(m.starts[
 export function predictedStarts(m: CycleModel, today: string, count = 3) {
   if (!m.starts.length) return [];
   const last = m.starts[m.starts.length - 1];
+  // последняя отметка слишком давно — прогноз был бы гаданием
+  if (daysBetween(last, today) > m.avgLen + 30) return [];
   const out: string[] = [];
   for (let k = 1; out.length < count && k < count + 4; k++) {
     const d = addDays(last, k * m.avgLen);
