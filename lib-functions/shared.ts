@@ -7,7 +7,9 @@ export interface KV {
 export interface Env {
   WHOOP_CLIENT_ID: string;
   WHOOP_CLIENT_SECRET: string;
-  /** временная передача результата входа в приложение, записи живут 15 минут */
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  /** временная передача результата входа (WHOOP и Google) в приложение, записи живут 15 минут */
   WHOOP_HANDOFF: KV;
 }
 

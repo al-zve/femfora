@@ -5,6 +5,8 @@ import { db } from '../db';
 import { disconnectWhoop, syncWhoop } from '../lib/whoop';
 import { WhoopConnect } from './WhoopConnect';
 import { WhoopCheck } from './WhoopCheck';
+import { GoogleConnect } from './GoogleConnect';
+import { INBOX_TITLE, REMIND_MINUTES, disconnectGoogle, syncGoogle } from '../lib/google';
 import { Calibrate } from './Calibrate';
 import { MayaImport } from './MayaImport';
 import { CALIBRATION } from '../lib/estimate';
@@ -33,6 +35,10 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
   const periodLen = typeof periodSetting?.value === 'number' ? periodSetting.value : DEFAULT_PERIOD;
 
   const [whoopMsg, setWhoopMsg] = useState('');
+  const googleAuth = useLiveQuery(() => db.settings.get('google_auth'));
+  const googleError = useLiveQuery(() => db.settings.get('google_error'));
+  const googleSyncAt = (useLiveQuery(() => db.settings.get('google_sync'))?.value as { at: number } | undefined)?.at;
+  const [googleMsg, setGoogleMsg] = useState('');
   const [remote, setRemote] = useState<string | null | undefined>(undefined);
   const [updating, setUpdating] = useState(false);
   const check = () => {
@@ -151,9 +157,48 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
                 </div>
               )}
               <div className="list-row">
-                Google Календарь <span className="val">скоро</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  Google
+                  <span className="caption" style={{ fontWeight: 500 }}>
+                    {googleAuth
+                      ? googleSyncAt
+                        ? `обновлено в ${new Date(googleSyncAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                        : 'подключён'
+                      : googleError
+                        ? 'нужно войти заново'
+                        : 'напоминания и входящие'}
+                  </span>
+                </span>
+                {googleAuth && (
+                  <span style={{ display: 'flex', gap: 14 }}>
+                    <button
+                      className="btn-text"
+                      onClick={() => {
+                        setGoogleMsg('');
+                        syncGoogle('all')
+                          .then((n) => onNotice(n ? `Из Google пришло задач: ${n}` : 'Google обновлён'))
+                          .catch((e) => setGoogleMsg((e as Error).message));
+                      }}
+                    >
+                      Обновить
+                    </button>
+                    <button className="btn-text" style={{ color: 'var(--muted)' }} onClick={() => disconnectGoogle()}>
+                      Отключить
+                    </button>
+                  </span>
+                )}
               </div>
+              {!googleAuth && (
+                <div style={{ padding: '4px 0 14px' }}>
+                  <GoogleConnect />
+                </div>
+              )}
             </div>
+            {googleMsg && <span className="error-text">{googleMsg}</span>}
+            <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+              Google: задачи со временем попадают в календарь «FemFora» с напоминанием за {REMIND_MINUTES} минут, а задачи из списка «{INBOX_TITLE}» в Google Tasks переезжают
+              сюда. В Google уходят только названия и время задач, данные о здоровье и цикле — никогда.
+            </span>
             {whoopMsg && <span className="error-text">{whoopMsg}</span>}
           </div>
 

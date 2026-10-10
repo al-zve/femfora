@@ -5,10 +5,12 @@ import { deleteTask, moveTask, updateTask } from '../lib/actions';
 import { addDays, shortDate } from '../lib/dates';
 import { Sheet } from './Sheet';
 import { subtasksBump } from '../lib/estimate';
+import { REMIND_MINUTES } from '../lib/google';
 import { BoltIcon, CheckIcon, SendIcon } from './icons';
 
 export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today: string; onClose: () => void; onNotice: (t: string) => void }) {
   const task = useLiveQuery(() => db.tasks.get(id), [id]);
+  const googleOn = !!useLiveQuery(() => db.settings.get('google_auth'));
   const [title, setTitle] = useState<string | null>(null);
   const [newSub, setNewSub] = useState('');
   const [newComment, setNewComment] = useState('');
@@ -138,6 +140,11 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
           <input id="ts-time" type="time" className="input" value={task.time} onChange={(e) => patch({ time: e.target.value })} />
         </div>
       </div>
+      {task.time && !task.done && (
+        <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4, marginTop: -8 }}>
+          {googleOn ? `Google напомнит за ${REMIND_MINUTES} минут` : 'Чтобы пришло уведомление, подключи Google в настройках'}
+        </span>
+      )}
 
       <div className="field">
         <span className="label">Нагрузка</span>

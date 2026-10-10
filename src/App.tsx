@@ -11,6 +11,9 @@ import { SettingsSheet, type ThemePref } from './components/SettingsSheet';
 import { CheckIcon, PlusIcon } from './components/icons';
 import { WhoopCallback } from './components/WhoopCallback';
 import { CycleSheet } from './components/CycleSheet';
+import { GoogleCallback } from './components/GoogleCallback';
+import { claimGoogle, getGooglePending, syncGoogle } from './lib/google';
+import { plural } from './lib/dates';
 import { claimPending, getPending, syncWhoop } from './lib/whoop';
 
 type Tab = 'today' | 'tasks' | 'health';
@@ -89,8 +92,72 @@ function useWhoopSync() {
   }, [hasPending]);
 }
 
+/** Google: входящие и напоминания при возвращении в приложение, напоминания — после изменения задач */
+function useGoogleSync(notify: (t: string) => void) {
+  const auth = useLiveQuery(() => db.settings.get('google_auth'));
+  const pending = useLiveQuery(() => db.settings.get('google_pending'));
+  const connected = !!auth;
+  const hasPending = !!pending;
+  // «отпечаток» того, что влияет на напоминания
+  const sig = useLiveQuery(async () => {
+    const ts = await db.tasks.filter((t) => !!t.time).toArray();
+    return ts.map((t) => `${t.id}|${t.title}|${t.date}|${t.time}|${t.done ? 1 : 0}`).sort().join('\n');
+  });
+  const lastAll = useRef(0);
+
+  const runAll = useCallback(async (force = false) => {
+    if (document.visibilityState !== 'visible') return;
+    if (!force && Date.now() - lastAll.current < 2 * 60_000) return;
+    lastAll.current = Date.now();
+    try {
+      const n = await syncGoogle('all');
+      if (n) notify(`Из Google ${plural(n, 'пришла', 'пришли', 'пришло')} ${n} ${plural(n, 'задача', 'задачи', 'задач')}`);
+    } catch {
+      /* попробуем позже */
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    if (!connected) return;
+    runAll(true);
+    const onVis = () => runAll();
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [connected, runAll]);
+
+  useEffect(() => {
+    if (!connected || sig === undefined) return;
+    const id = window.setTimeout(() => syncGoogle('reminders').catch(() => undefined), 2500);
+    return () => clearTimeout(id);
+  }, [connected, sig]);
+
+  // пока идёт вход в Google, каждые 3 секунды спрашиваем сервер, готов ли результат
+  useEffect(() => {
+    if (!hasPending) return;
+    let stop = false;
+    const tick = async () => {
+      if (stop || document.visibilityState !== 'visible') return;
+      try {
+        if (!(await getGooglePending())) return;
+        if (await claimGoogle()) notify('Google подключён');
+      } catch {
+        /* попробуем на следующем шаге */
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 3000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      stop = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [hasPending, notify]);
+}
+
 export default function App() {
   if (location.pathname === '/whoop/callback') return <WhoopCallback />;
+  if (location.pathname === '/google/callback') return <GoogleCallback />;
   return <Main />;
 }
 
@@ -110,6 +177,7 @@ function Main() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2400);
   }, []);
 
+  useGoogleSync(notify);
   const close = useCallback(() => setSheet(null), []);
   const openTask = useCallback((id: string) => setSheet({ kind: 'task', id }), []);
   const openSettings = useCallback(() => setSheet({ kind: 'settings' }), []);

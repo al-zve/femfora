@@ -15,15 +15,17 @@ p,li{color:#3a3440}
 <body>
 <main>
 <h1>Конфиденциальность FemFora</h1>
-<p>FemFora — личное приложение для планирования задач с учётом самочувствия. Обновлено 8 октября 2026.</p>
+<p>FemFora — личное приложение для планирования задач с учётом самочувствия. Обновлено 10 октября 2026.</p>
 <h2>Где хранятся данные</h2>
 <p>Задачи, самочувствие, данные о цикле и данные WHOOP хранятся только на устройстве пользовательницы, в хранилище браузера. У FemFora нет базы данных на сервере, аналитики и рекламных трекеров.</p>
 <h2>WHOOP</h2>
 <p>После разрешения пользовательницы FemFora получает из WHOOP recovery, сон, strain и базовый профиль. Запросы к WHOOP проходят через серверную функцию на Cloudflare, которая передаёт токен доступа и не сохраняет данные WHOOP. Только при первом подключении ключи доступа на несколько минут, но не дольше 15, сохраняются на сервере в зашифрованном виде: расшифровать их может только приложение на устройстве пользовательницы, и после этого они сразу удаляются. Доступ можно отключить в настройках FemFora или в аккаунте WHOOP.</p>
+<h2>Google</h2>
+<p>Если пользовательница подключает Google, FemFora создаёт в её Google Календаре отдельный календарь «FemFora» и добавляет туда задачи, у которых указано время (название и время задачи, напоминание за 10 минут). Из списка Google Tasks «FemFora Inbox» FemFora забирает новые задачи в приложение и отмечает их выполненными в Google. FemFora запрашивает только эти права: управление календарями, которые создало само приложение, и доступ к Google Tasks. Другие календари пользовательницы приложение не читает. Данные о здоровье и цикле в Google не передаются. Обмен ключами доступа проходит через серверную функцию на Cloudflare так же, как для WHOOP; данные Google на сервере не сохраняются. Доступ можно отключить в настройках FemFora или в аккаунте Google.</p>
 <h2>Удаление</h2>
 <p>Все данные удаляются вместе с приложением с домашнего экрана или через очистку данных сайта app.femfora.com в настройках браузера.</p>
 <h2>English summary</h2>
-<p>FemFora stores all data, including WHOOP data, only on the user's device. A Cloudflare function relays OAuth and WHOOP API requests without storing WHOOP data; during the first connection, access tokens are held for up to 15 minutes, encrypted to a key that only the user's device has, and deleted once claimed. No analytics, no third-party trackers.</p>
+<p>FemFora stores all data, including WHOOP data, only on the user's device. A Cloudflare function relays OAuth and WHOOP API requests without storing WHOOP data; during the first connection, access tokens are held for up to 15 minutes, encrypted to a key that only the user's device has, and deleted once claimed. No analytics, no third-party trackers. If Google is connected, FemFora creates its own "FemFora" calendar for timed tasks (title and time, 10-minute reminder) and imports tasks from the Google Tasks list "FemFora Inbox", marking them completed. Scopes: calendar.app.created and tasks; other calendars are not read; health and cycle data are never sent to Google.</p>
 </main>
 </body>
 </html>
