@@ -60,7 +60,7 @@ export function GoogleConnect() {
       </button>
       <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, fontWeight: 500, lineHeight: 1.4, color: 'var(--muted)' }}>
         <li>Открой Safari и вставь ссылку в адресную строку.</li>
-        <li>Войди в Google. Если появится предупреждение, что приложение не проверено, нажми «Дополнительно» и перейди на app.femfora.com: это твоё личное приложение.</li>
+        <li>Войди в Google. Если появится предупреждение, что приложение не проверено, нажми «Дополнительно» и перейди на app.femfora.com. Google показывает его приложениям, которые ещё не прошли его проверку.</li>
         <li>Разреши доступ к календарю FemFora и к задачам.</li>
         <li>Вернись сюда: через пару секунд подключение завершится само.</li>
       </ol>
