@@ -118,12 +118,13 @@ export interface Move {
 
 /**
  * Что перенести с дня `date`, чтобы нагрузка уложилась в бюджет.
- * Не трогаем сделанные, задачи со временем и задачи с дедлайном в этот день или раньше.
+ * Не трогаем сделанные, задачи со временем и задачи с дедлайном.
  * Сначала тяжёлые; каждую — на ближайший день, где для неё есть запас сил.
  */
 export function proposePlan(ctx: PlanCtx, dayTasks: Task[], date: string, budget = budgetFor(ctx, date)) {
   let total = load(dayTasks);
-  const movable = dayTasks.filter((t) => !t.done && !t.time && !(t.deadline && t.deadline <= date)).sort((a, b) => b.energy - a.energy);
+  // задачи с дедлайном и со временем план не двигает никогда — их переносишь только ты сама
+  const movable = dayTasks.filter((t) => !t.done && !t.time && !t.deadline).sort((a, b) => b.energy - a.energy);
   const extra = new Map<string, number>();
   const out: Move[] = [];
   for (const t of movable) {

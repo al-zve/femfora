@@ -16,6 +16,7 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
   const [newComment, setNewComment] = useState('');
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pickDate, setPickDate] = useState('');
   const timer = useRef<number>(0);
   // сколько подзадач было при открытии: подсказка появляется, только если их добавили сейчас
   const initialSubs = useRef<number | null>(null);
@@ -132,11 +133,25 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
 
       <div className="grid2" style={{ gap: 10 }}>
         <div className="field">
-          <label htmlFor="ts-deadline">Дедлайн</label>
+          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 20 }}>
+            <label htmlFor="ts-deadline">Дедлайн</label>
+            {task.deadline && (
+              <button className="btn-text" style={{ minHeight: 20, fontSize: 13, color: 'var(--muted)' }} onClick={() => patch({ deadline: '' })}>
+                Убрать
+              </button>
+            )}
+          </span>
           <input id="ts-deadline" type="date" className="input" value={task.deadline} onChange={(e) => patch({ deadline: e.target.value })} />
         </div>
         <div className="field">
-          <label htmlFor="ts-time">Напоминание</label>
+          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 20 }}>
+            <label htmlFor="ts-time">Напоминание</label>
+            {task.time && (
+              <button className="btn-text" style={{ minHeight: 20, fontSize: 13, color: 'var(--muted)' }} onClick={() => patch({ time: '' })}>
+                Убрать
+              </button>
+            )}
+          </span>
           <input id="ts-time" type="time" className="input" value={task.time} onChange={(e) => patch({ time: e.target.value })} />
         </div>
       </div>
@@ -237,17 +252,34 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
           <button className="btn btn-secondary" onClick={() => moveTo(addDays(today, 1))}>
             На завтра
           </button>
-          <label className="btn btn-secondary" style={{ position: 'relative', overflow: 'hidden' }}>
-            На другой день
+          <label className="btn btn-secondary" style={{ position: 'relative', overflow: 'hidden', color: 'var(--text)' }}>
+            {pickDate ? shortDate(pickDate) : 'На другой день'}
+            {/* iPhone ставит сегодняшнюю дату сразу при открытии календаря, поэтому только выбираем, а переносим по кнопке */}
             <input
               type="date"
-              aria-label="Перенести на дату"
+              aria-label="Выбрать дату переноса"
               min={today}
-              onChange={(e) => e.target.value && moveTo(e.target.value)}
+              value={pickDate || task.date}
+              onChange={(e) => setPickDate(e.target.value)}
               style={{ position: 'absolute', inset: 0, opacity: 0 }}
             />
           </label>
         </div>
+        {pickDate && pickDate !== task.date && (
+          <div className="drop" style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => moveTo(pickDate)}>
+              Перенести на {shortDate(pickDate)}
+            </button>
+            <button className="btn-text" style={{ color: 'var(--muted)', padding: '0 12px' }} onClick={() => setPickDate('')}>
+              Отмена
+            </button>
+          </div>
+        )}
+        {pickDate && pickDate === task.date && (
+          <span className="caption drop" style={{ fontWeight: 500 }}>
+            Задача уже стоит на этот день. Выбери другую дату.
+          </span>
+        )}
       </div>
 
       {confirmDelete ? (

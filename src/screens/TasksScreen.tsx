@@ -262,7 +262,7 @@ export function TasksScreen({
             </button>
           ) : (
             <span className="caption" style={{ fontWeight: 500 }}>
-              Перенести нечего: у задач есть время или близкий дедлайн.
+              Перенести нечего: у задач есть время или дедлайн, их переносишь только ты.
             </span>
           )}
         </div>
