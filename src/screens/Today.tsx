@@ -117,7 +117,8 @@ export function Today({
   return (
     <div className="screen">
       <div className="header">
-        <h1>{longDate(today)}</h1>
+        {/* «Понедельник, 12 октября» не помещается в 28px на iPhone — уменьшаем шрифт, а не переносим */}
+        <h1 style={{ fontSize: 'clamp(20px, 6vw, 28px)', whiteSpace: 'nowrap' }}>{longDate(today)}</h1>
         <button className="icon-btn" aria-label="Настройки" onClick={openSettings}>
           <GearIcon />
         </button>

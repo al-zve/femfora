@@ -3,14 +3,24 @@ import { fromDate, plural, shortDate } from '../lib/dates';
 import { Bolts } from './Bolts';
 import { CheckIcon } from './icons';
 
-export function taskMeta(t: Task, today: string) {
-  const parts: string[] = [];
-  if (t.time) parts.push(t.time);
-  if (t.date < today && !t.done) parts.push(fromDate(t.date));
-  if (t.deadline) parts.push(`до ${shortDate(t.deadline)}`);
-  if (t.subs.length) parts.push(`подзадачи ${t.subs.filter((s) => s.done).length}/${t.subs.length}`);
-  if (t.comments.length) parts.push(`${t.comments.length} ${plural(t.comments.length, 'комментарий', 'комментария', 'комментариев')}`);
-  return parts.join(' · ');
+export interface MetaPart {
+  text: string;
+  /** выделить цветом: просроченный дедлайн */
+  hl?: boolean;
+}
+
+export function taskMeta(t: Task, today: string): MetaPart[] {
+  const parts: MetaPart[] = [];
+  if (t.time) parts.push({ text: t.time });
+  if (t.date < today && !t.done) parts.push({ text: fromDate(t.date) });
+  if (t.deadline) {
+    if (!t.done && t.deadline < today) parts.push({ text: `срок прошёл ${shortDate(t.deadline)}`, hl: true });
+    else if (!t.done && t.deadline === today) parts.push({ text: 'срок сегодня', hl: true });
+    else parts.push({ text: `до ${shortDate(t.deadline)}` });
+  }
+  if (t.subs.length) parts.push({ text: `подзадачи ${t.subs.filter((s) => s.done).length}/${t.subs.length}` });
+  if (t.comments.length) parts.push({ text: `${t.comments.length} ${plural(t.comments.length, 'комментарий', 'комментария', 'комментариев')}` });
+  return parts;
 }
 
 export function TaskRow({
@@ -43,10 +53,14 @@ export function TaskRow({
       <button className="task-body" onClick={onOpen}>
         <span className="task-text">
           <span className={`task-title${checked ? ' done' : ''}`}>{task.title}</span>
-          {(meta || highlight) && (
+          {(meta.length > 0 || highlight) && (
             <span className="task-meta">
-              {meta}
-              {highlight && <span className="hl">{(meta ? ' · ' : '') + highlight}</span>}
+              {meta.map((m, i) => (
+                <span key={i} className={m.hl ? 'hl' : undefined}>
+                  {(i ? ' · ' : '') + m.text}
+                </span>
+              ))}
+              {highlight && <span className="hl">{(meta.length ? ' · ' : '') + highlight}</span>}
             </span>
           )}
         </span>

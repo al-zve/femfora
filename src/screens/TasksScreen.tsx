@@ -96,13 +96,23 @@ export function TasksScreen({
   }
 
   const byList = (t: { list?: ListId }) => filter === 'all' || t.list === filter;
-  const dayTasks = (tasks ?? []).filter((t) => t.date === selected && byList(t)).sort((a, b) => Number(a.done) - Number(b.done) || (a.time || '99').localeCompare(b.time || '99'));
+  // сегодня — как на экране «Сегодня»: вместе с невыполненными задачами прошлых дней и сделанными сегодня
+  const doneToday = (t: Task) => t.done && t.doneAt != null && toKey(new Date(t.doneAt)) === today;
+  const onSelected = (t: Task) => t.date === selected || (selected === today && t.date < today && (!t.done || doneToday(t)));
+  const dayTasks = (tasks ?? [])
+    .filter((t) => onSelected(t) && byList(t))
+    .sort((a, b) => Number(a.done) - Number(b.done) || (a.time || '99').localeCompare(b.time || '99') || a.date.localeCompare(b.date));
   const taskById = new Map((tasks ?? []).map((t) => [t.id, t] as [string, Task]));
-  const movedAway = (moves ?? [])
+  // «перенесена»: по одной строке на задачу, только если её отложили на более поздний день; дата — где она сейчас
+  const movedSeen = new Set<string>();
+  const movedAway = [...(moves ?? [])]
     .filter((m) => m.from === selected)
+    .sort((a, b) => b.at - a.at)
     .filter((m) => {
       const t = taskById.get(m.taskId);
-      return t && t.date !== selected && byList(t);
+      if (!t || movedSeen.has(t.id) || onSelected(t) || t.date <= selected || !byList(t)) return false;
+      movedSeen.add(t.id);
+      return true;
     });
 
   const doneN = dayTasks.filter((t) => t.done).length;
@@ -312,7 +322,7 @@ export function TasksScreen({
               <button className="task-body" onClick={() => openTask(t.id)}>
                 <span className="task-text">
                   <span className="task-title muted">{m.title}</span>
-                  <span className="task-meta">перенесена на {shortDate(m.to)}</span>
+                  <span className="task-meta">перенесена на {shortDate(t.date)}</span>
                 </span>
                 <Bolts n={t.energy} />
               </button>
