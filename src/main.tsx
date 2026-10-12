@@ -6,6 +6,7 @@ import '@fontsource/nunito/700.css';
 import '@fontsource/nunito/800.css';
 import './styles.css';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { initUpdates } from './lib/update';
 
 initUpdates();
@@ -15,6 +16,8 @@ navigator.storage?.persist?.().catch(() => undefined);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );

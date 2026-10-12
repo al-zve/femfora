@@ -110,4 +110,16 @@ class FemForaDB extends Dexie {
 }
 
 export const db = new FemForaDB();
+
+// старые или импортированные задачи могут быть без каких-то полей — дополняем при чтении, чтобы экран не падал
+db.tasks.hook('reading', (t: Task) => ({
+  ...t,
+  title: t.title ?? '',
+  date: t.date ?? '',
+  time: t.time ?? '',
+  deadline: t.deadline ?? '',
+  energy: t.energy ?? 2,
+  subs: Array.isArray(t.subs) ? t.subs : [],
+  comments: Array.isArray(t.comments) ? t.comments : []
+}));
 export const uid = () => crypto.randomUUID();

@@ -15,6 +15,37 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Страховка от белого экрана: если приложение не запустилось за 6 секунд,
+         показываем объяснение и кнопку, которая загружает свежую версию с сервера.
+         Данные (IndexedDB) не трогаем. Работает даже если основной код не загрузился. -->
+    <div id="ff-rescue" style="display:none;position:fixed;inset:0;flex-direction:column;justify-content:center;align-items:center;gap:14px;padding:24px;text-align:center;background:#FBF6F8;color:#1E1A22;font-family:system-ui,sans-serif">
+      <b style="font-size:20px">FemFora не загрузилась</b>
+      <span style="font-size:15px;color:#6E6673;max-width:320px;line-height:1.45">Твои задачи и данные на месте. Нажми кнопку — приложение загрузится заново с сервера.</span>
+      <button id="ff-rescue-btn" style="height:48px;padding:0 24px;border:0;border-radius:14px;background:#E0218A;color:#fff;font-size:16px;font-weight:700">Загрузить заново</button>
+      <code id="ff-rescue-err" style="font-size:12px;color:#6E6673;max-width:340px;word-break:break-word"></code>
+    </div>
+    <script>
+      (function () {
+        var errs = [];
+        window.__ffErrors = errs;
+        window.addEventListener('error', function (e) { errs.push((e.message || 'ошибка загрузки') + (e.filename ? ' @ ' + e.filename.split('/').pop() : '') + (e.target && e.target.src ? ' ' + e.target.src.split('/').pop() : '')); }, true);
+        window.addEventListener('unhandledrejection', function (e) { errs.push(String(e.reason && e.reason.message || e.reason)); });
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return;
+          var box = document.getElementById('ff-rescue');
+          box.style.display = 'flex';
+          document.getElementById('ff-rescue-err').textContent = errs.slice(0, 3).join(' | ');
+        }, 6000);
+        document.getElementById('ff-rescue-btn').onclick = function () {
+          var done = function () { location.replace('/?u=' + Date.now()); };
+          var jobs = [];
+          if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+          if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+          Promise.all(jobs).then(done, done);
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
