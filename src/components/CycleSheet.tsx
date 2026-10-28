@@ -8,8 +8,8 @@ import { ChevronDown } from './icons';
 
 /** «текст [1] текст» → номера источников мелким серым */
 export function Cited({ text }: { text: string }) {
-  const parts: ReactNode[] = text.split(/(\[\d\])/).map((p, i) =>
-    /^\[\d\]$/.test(p) ? (
+  const parts: ReactNode[] = text.split(/(\[\d+\])/).map((p, i) =>
+    /^\[\d+\]$/.test(p) ? (
       <span key={i} className="cite">
         {p}
       </span>
@@ -114,7 +114,7 @@ export function CycleSheet({
       <div className={canMarkToday ? 'grid2' : undefined} style={canMarkToday ? undefined : { display: 'flex' }}>
         {canMarkToday && (
           <button
-            className="btn btn-primary"
+            className="btn btn-primary" style={{ fontSize: 15, whiteSpace: 'nowrap', padding: '0 10px' }}
             onClick={async () => {
               await markPeriodStart(today);
               onNotice('Отмечено: месячные начались сегодня');
