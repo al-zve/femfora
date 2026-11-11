@@ -1,7 +1,7 @@
 import type { Task } from '../db';
 import { fromDate, plural, shortDate } from '../lib/dates';
 import { Bolts } from './Bolts';
-import { CheckIcon } from './icons';
+import { CheckIcon, RepeatIcon } from './icons';
 
 export interface MetaPart {
   text: string;
@@ -53,8 +53,14 @@ export function TaskRow({
       <button className="task-body" onClick={onOpen}>
         <span className="task-text">
           <span className={`task-title${checked ? ' done' : ''}`}>{task.title}</span>
-          {(meta.length > 0 || highlight) && (
+          {(meta.length > 0 || highlight || task.seriesId) && (
             <span className="task-meta">
+              {task.seriesId && (
+                <span className="rep" style={{ marginRight: meta.length || highlight ? 6 : 0 }}>
+                  <RepeatIcon size={12} />
+                  <span className="sr-only">Повторяется</span>
+                </span>
+              )}
               {meta.map((m, i) => (
                 <span key={i} className={m.hl ? 'hl' : undefined}>
                   {(i ? ' · ' : '') + m.text}

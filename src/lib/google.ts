@@ -1,4 +1,5 @@
 import { db, type Task } from '../db';
+import { syncSeries } from './repeat';
 import { addTask } from './actions';
 import { estimateEnergy } from './estimate';
 import { addDays, todayKey } from './dates';
@@ -315,6 +316,8 @@ export function syncGoogle(what: 'all' | 'reminders' = 'all'): Promise<number> {
     if (what === 'all') {
       added += await syncInbox();
       added += await pullTasks();
+      // в Google могли отметить повтор — следующий появится сразу
+      await syncSeries();
     }
     await pushTasks();
     await syncReminders();

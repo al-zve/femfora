@@ -8,5 +8,13 @@ export type CalibAnswers = Record<string, Energy>;
 export function useExamples(): Example[] {
   const calib = useLiveQuery(() => db.settings.get('energy_calib'))?.value as CalibAnswers | undefined;
   const tasks = useLiveQuery(() => db.tasks.orderBy('date').reverse().limit(300).toArray(), []);
-  return [...Object.entries(calib ?? {}).map(([title, energy]) => ({ title, energy })), ...(tasks ?? []).map((t) => ({ title: t.title, energy: t.energy }))];
+  // повторы одной задачи — один пример, иначе ежедневная задача перевесит остальные
+  const seen = new Set<string>();
+  const own = (tasks ?? []).filter((t) => {
+    const k = t.title.trim().toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return [...Object.entries(calib ?? {}).map(([title, energy]) => ({ title, energy })), ...own.map((t) => ({ title: t.title, energy: t.energy }))];
 }

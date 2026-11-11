@@ -6,6 +6,8 @@ import { bestDay, budgetFor, loadOn } from '../lib/plan';
 import { usePlan } from '../lib/usePlan';
 import { estimateEnergy } from '../lib/estimate';
 import { useExamples } from '../lib/useExamples';
+import { createSeries } from '../lib/repeat';
+import { RepeatPicker, noRepeat, ruleOf, type RepeatDraft } from './RepeatPicker';
 import { Load } from './Bolts';
 import { Sheet } from './Sheet';
 import { BoltIcon } from './icons';
@@ -17,6 +19,9 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
   const [list, setList] = useState<ListId>('personal');
   const [date, setDate] = useState(defaultDate);
   const [hint, setHint] = useState('');
+  const [repeat, setRepeat] = useState<RepeatDraft>(() => noRepeat(defaultDate));
+  const rule = ruleOf(repeat, date);
+  const repeatBad = repeat.kind !== 'none' && !rule;
   // после «Оценить» оценка пересчитывается, когда меняется число подзадач; ручной выбор это выключает
   const [auto, setAuto] = useState(false);
   const subsCount = subs.split('\n').filter((x) => x.trim()).length;
@@ -40,7 +45,13 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
   const label = (d: string) => (d === today ? 'сегодня' : d === tomorrow ? 'завтра' : `${DOW_SHORT[dowIdx(d)].toLowerCase()}, ${shortDate(d)}`);
 
   const submit = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || repeatBad) return;
+    const subList = subs.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (rule) {
+      await createSeries({ title, date, energy, list, subs: subList, rule, mode: repeat.mode });
+      onClose();
+      return;
+    }
     await addTask({
       title,
       date,
@@ -71,7 +82,7 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
         <textarea id="add-subs" className="input" rows={3} value={subs} placeholder="Необязательно" onChange={(e) => setSubs(e.target.value)} />
       </div>
       <div className="field">
-        <span className="label">Когда</span>
+        <span className="label">{rule ? 'С какого дня' : 'Когда'}</span>
         <div className="grid3">
           <button className="chip" aria-pressed={date === today} onClick={() => setDate(today)}>
             Сегодня
@@ -144,6 +155,7 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
           )}
         </div>
       )}
+      <RepeatPicker value={repeat} date={date} onChange={setRepeat} />
       <div className="field">
         <span className="label">Список</span>
         <div className="grid2">
@@ -155,7 +167,7 @@ export function AddSheet({ today, defaultDate, onClose }: { today: string; defau
           </button>
         </div>
       </div>
-      <button className="btn btn-primary" style={{ height: 52 }} disabled={!title.trim()} onClick={submit}>
+      <button className="btn btn-primary" style={{ height: 52 }} disabled={!title.trim() || repeatBad} onClick={submit}>
         Добавить
       </button>
     </Sheet>

@@ -1,5 +1,6 @@
 import { db, uid, type Energy, type ListId, type Task } from '../db';
 import { daysBetween } from './dates';
+import { afterDoneChange } from './repeat';
 
 export function parseQuickTitle(raw: string) {
   const m = raw.match(/@\s?([01]?\d|2[0-3])[:.]([0-5]\d)/);
@@ -36,6 +37,8 @@ export async function updateTask(id: string, patch: Partial<Task>) {
 
 export async function setDone(id: string, done: boolean) {
   await updateTask(id, { done, doneAt: done ? Date.now() : null });
+  const t = await db.tasks.get(id);
+  if (t?.seriesId) await afterDoneChange(t);
 }
 
 export async function moveTask(task: Task, to: string) {
@@ -46,16 +49,26 @@ export async function moveTask(task: Task, to: string) {
   });
 }
 
+/**
+ * Удалить задачи вместе со следами переносов. Вызывать внутри транзакции с tasks, moves и settings.
+ * Задачи, которые были в Google Tasks, запоминаем, чтобы удалить их и там при следующей синхронизации.
+ */
+export async function dropTasks(tasks: Task[]) {
+  if (!tasks.length) return;
+  const g = tasks.filter((t) => t.gTask).map((t) => ({ id: t.gTask!.id, list: t.gTask!.list }));
+  if (g.length) {
+    const prev = ((await db.settings.get('gtask_tombstones'))?.value as { id: string; list: string }[] | undefined) ?? [];
+    await db.settings.put({ key: 'gtask_tombstones', value: [...prev, ...g] });
+  }
+  const ids = tasks.map((t) => t.id);
+  await db.tasks.bulkDelete(ids);
+  await db.moves.where('taskId').anyOf(ids).delete();
+}
+
 export async function deleteTask(id: string) {
   await db.transaction('rw', db.tasks, db.moves, db.settings, async () => {
     const t = await db.tasks.get(id);
-    // задача была в Google Tasks — запомним, чтобы удалить её и там при следующей синхронизации
-    if (t?.gTask) {
-      const prev = ((await db.settings.get('gtask_tombstones'))?.value as { id: string; list: string }[] | undefined) ?? [];
-      await db.settings.put({ key: 'gtask_tombstones', value: [...prev, { id: t.gTask.id, list: t.gTask.list }] });
-    }
-    await db.tasks.delete(id);
-    await db.moves.where('taskId').equals(id).delete();
+    if (t) await dropTasks([t]);
   });
 }
 

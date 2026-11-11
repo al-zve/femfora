@@ -34,6 +34,43 @@ export interface Task {
   updatedAt: number;
   /** связь с Google Tasks: id задачи и списка, отметка времени Google и когда синхронизировали */
   gTask?: { id: string; list: string; updated: string; syncedAt: number };
+  /** повтор: id серии и день, на который этот повтор приходился по правилу */
+  seriesId?: string;
+  occ?: string;
+}
+
+/**
+ * Правило повтора. dow — 0 = понедельник … 6 = воскресенье.
+ * interval: каждые n дней (unit day) или недель (unit week), отсчёт от start.
+ * monthly: dom-го числа, в коротком месяце — в последний день.
+ */
+export type RepeatRule =
+  | { kind: 'daily' }
+  | { kind: 'weekdays'; days: number[] }
+  | { kind: 'interval'; n: number; unit: 'day' | 'week' }
+  | { kind: 'monthly'; dom: number };
+
+/** schedule — повторы стоят на своих днях; after — следующий появляется после выполнения текущего */
+export type RepeatMode = 'schedule' | 'after';
+
+/** серия повторяющихся задач: шаблон и правило; сами повторы — обычные задачи с seriesId */
+export interface Series {
+  id: string;
+  title: string;
+  time: string;
+  energy: Energy;
+  list: ListId;
+  subs: string[];
+  rule: RepeatRule;
+  mode: RepeatMode;
+  /** день отсчёта правила */
+  start: string;
+  /** schedule: по какой день повторы уже созданы (удалённые вручную не возвращаются) */
+  genUntil: string;
+  /** after: последний созданный повтор */
+  lastId?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /** след переноса: задача уехала с одного дня на другой */
@@ -93,6 +130,7 @@ class FemForaDB extends Dexie {
   settings!: Table<Setting, string>;
   whoop!: Table<WhoopDay, string>;
   periods!: Table<Period, string>;
+  series!: Table<Series, string>;
 
   constructor() {
     super('femfora');
@@ -107,6 +145,10 @@ class FemForaDB extends Dexie {
     });
     this.version(3).stores({
       periods: 'start'
+    });
+    this.version(4).stores({
+      tasks: 'id, date, done, deadline, seriesId',
+      series: 'id'
     });
   }
 }

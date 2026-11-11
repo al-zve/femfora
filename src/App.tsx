@@ -15,6 +15,7 @@ import { GoogleCallback } from './components/GoogleCallback';
 import { claimGoogle, getGooglePending, syncGoogle } from './lib/google';
 import { plural } from './lib/dates';
 import { claimPending, getPending, syncWhoop } from './lib/whoop';
+import { syncSeries } from './lib/repeat';
 
 type Tab = 'today' | 'tasks' | 'health';
 type SheetState = { kind: 'add' } | { kind: 'task'; id: string } | { kind: 'settings' } | { kind: 'cycle' } | null;
@@ -178,6 +179,10 @@ function Main() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2400);
   }, []);
 
+  // повторы: досоздать на две недели вперёд и убрать пропущенные — при открытии и в новый день
+  useEffect(() => {
+    syncSeries(today).catch(() => undefined);
+  }, [today]);
   useGoogleSync(notify);
   const close = useCallback(() => setSheet(null), []);
   const openTask = useCallback((id: string) => setSheet({ kind: 'task', id }), []);

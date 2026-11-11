@@ -28,6 +28,8 @@ export const CheckIcon = ({ size = 15, ...p }: P) => stroke(size, 3, p, <path d=
 export const ChevronDown = ({ size = 18, ...p }: P) => stroke(size, 2.2, p, <path d="m6 9 6 6 6-6" />);
 export const ChevronLeft = ({ size = 20, ...p }: P) => stroke(size, 2.2, p, <path d="m15 6-6 6 6 6" />);
 export const ChevronRight = ({ size = 20, ...p }: P) => stroke(size, 2.2, p, <path d="m9 6 6 6-6 6" />);
+export const RepeatIcon = ({ size = 13, ...p }: P) =>
+  stroke(size, 2.4, p, <path d="M17 2l3 3-3 3M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 0 1-4 4H4" />);
 export const PlusIcon = ({ size = 28, ...p }: P) => stroke(size, 2.6, p, <path d="M12 5v14M5 12h14" />);
 export const CloseIcon = ({ size = 20, ...p }: P) => stroke(size, 2.4, p, <path d="M6 6l12 12M18 6 6 18" />);
 export const ArrowRight = ({ size = 15, ...p }: P) => stroke(size, 2.4, p, <path d="M5 12h14M13 6l6 6-6 6" />);

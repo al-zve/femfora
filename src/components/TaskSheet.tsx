@@ -7,10 +7,14 @@ import { Sheet } from './Sheet';
 import { subtasksBump } from '../lib/estimate';
 import { REMIND_MINUTES } from '../lib/google';
 import { BoltIcon, CheckIcon, SendIcon } from './icons';
+import { changeRepeat, deleteSeries, describe, stopRepeat, updateSeriesFields } from '../lib/repeat';
+import { RepeatPicker, draftOf, ruleOf, type RepeatDraft } from './RepeatPicker';
 
 export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today: string; onClose: () => void; onNotice: (t: string) => void }) {
   const task = useLiveQuery(() => db.tasks.get(id), [id]);
   const googleOn = !!useLiveQuery(() => db.settings.get('google_auth'));
+  const series = useLiveQuery(async () => (task?.seriesId ? (await db.series.get(task.seriesId)) ?? null : null), [task?.seriesId]);
+  const [repeatEdit, setRepeatEdit] = useState<RepeatDraft | null>(null);
   const [title, setTitle] = useState<string | null>(null);
   const [newSub, setNewSub] = useState('');
   const [newComment, setNewComment] = useState('');
@@ -39,6 +43,28 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
   const patch = async (p: Partial<Task>) => {
     await updateTask(task.id, p);
     flash();
+  };
+  // у повтора название, время, нагрузка и список меняются и у следующих повторов
+  const patchShared = async (p: Partial<Pick<Task, 'title' | 'time' | 'energy' | 'list'>>) => {
+    if (!series) return patch(p);
+    await updateSeriesFields(task, p);
+    flash();
+  };
+  // повтор считаем от дня задачи, у просроченной — от сегодня
+  const repDate = task.date < today ? today : task.date;
+  const repeatRule = repeatEdit ? ruleOf(repeatEdit, repDate) : null;
+  const saveRepeat = async () => {
+    if (!repeatEdit) return;
+    if (repeatEdit.kind === 'none') {
+      if (series) {
+        await stopRepeat(task);
+        onNotice('Повтор убран');
+      }
+    } else if (repeatRule) {
+      await changeRepeat(task, repeatRule, repeatEdit.mode);
+      onNotice(series ? 'Повтор изменён' : 'Задача будет повторяться');
+    }
+    setRepeatEdit(null);
   };
 
   const addSub = async () => {
@@ -79,7 +105,7 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
           style={{ fontWeight: 600 }}
           value={title ?? ''}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => title && title.trim() && title !== task.title && patch({ title: title.trim() })}
+          onBlur={() => title && title.trim() && title !== task.title && patchShared({ title: title.trim() })}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         />
       </div>
@@ -131,7 +157,8 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
         </div>
       </div>
 
-      <div className="grid2" style={{ gap: 10 }}>
+      <div className={series ? undefined : 'grid2'} style={{ gap: 10 }}>
+        {!series && (
         <div className="field">
           <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 20 }}>
             <label htmlFor="ts-deadline">Дедлайн</label>
@@ -143,16 +170,17 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
           </span>
           <input id="ts-deadline" type="date" className="input" value={task.deadline} onChange={(e) => patch({ deadline: e.target.value })} />
         </div>
+        )}
         <div className="field">
           <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 20 }}>
             <label htmlFor="ts-time">Напоминание</label>
             {task.time && (
-              <button className="btn-text" style={{ minHeight: 20, fontSize: 13, color: 'var(--muted)' }} onClick={() => patch({ time: '' })}>
+              <button className="btn-text" style={{ minHeight: 20, fontSize: 13, color: 'var(--muted)' }} onClick={() => patchShared({ time: '' })}>
                 Убрать
               </button>
             )}
           </span>
-          <input id="ts-time" type="time" className="input" value={task.time} onChange={(e) => patch({ time: e.target.value })} />
+          <input id="ts-time" type="time" className="input" value={task.time} onChange={(e) => patchShared({ time: e.target.value })} />
         </div>
       </div>
       {task.time && !task.done && (
@@ -172,7 +200,7 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
               aria-label={['', 'Лёгкая', 'Средняя', 'Тяжёлая'][v]}
               onClick={() => {
                 setEnergyTouched(true);
-                patch({ energy: v });
+                patchShared({ energy: v });
               }}
             >
               {Array.from({ length: v }, (_, i) => (
@@ -212,12 +240,43 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
               ['personal', 'Личное']
             ] as [ListId, string][]
           ).map(([v, l]) => (
-            <button key={v} className="chip" aria-pressed={task.list === v} onClick={() => patch({ list: v })}>
+            <button key={v} className="chip" aria-pressed={task.list === v} onClick={() => patchShared({ list: v })}>
               {l}
             </button>
           ))}
         </div>
       </div>
+
+      {repeatEdit ? (
+        <div className="drop" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <RepeatPicker value={repeatEdit} date={repDate} onChange={setRepeatEdit} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} disabled={repeatEdit.kind !== 'none' && !repeatRule} onClick={saveRepeat}>
+              {repeatEdit.kind === 'none' ? (series ? 'Убрать повтор' : 'Готово') : 'Сохранить повтор'}
+            </button>
+            <button className="btn-text" style={{ color: 'var(--muted)', padding: '0 12px' }} onClick={() => setRepeatEdit(null)}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="field">
+          <span className="label">Повтор</span>
+          <div className="list-box">
+            <div className="list-row">
+              <span style={{ fontWeight: 600, lineHeight: 1.35 }}>{series ? describe(series.rule, series.mode) : 'Не повторяется'}</span>
+              <button className="btn-text" style={{ flexShrink: 0 }} onClick={() => setRepeatEdit(draftOf(series ?? undefined, repDate))}>
+                {series ? 'Изменить' : 'Настроить'}
+              </button>
+            </div>
+          </div>
+          {series && (
+            <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
+              Название, время, нагрузка и список меняются у этого и следующих повторов. Подзадачи и комментарии — только у этого.
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="field">
         <span className="label">Комментарии</span>
@@ -282,7 +341,35 @@ export function TaskSheet({ id, today, onClose, onNotice }: { id: string; today:
         )}
       </div>
 
-      {confirmDelete ? (
+      {confirmDelete && series ? (
+        <div className="drop" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="grid2">
+            <button
+              className="btn btn-primary"
+              onClick={async () => {
+                await deleteTask(task.id);
+                onNotice('Повтор удалён');
+                onClose();
+              }}
+            >
+              Только этот
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={async () => {
+                await deleteSeries(task);
+                onNotice('Все повторы удалены');
+                onClose();
+              }}
+            >
+              Все повторы
+            </button>
+          </div>
+          <button className="btn-text" style={{ color: 'var(--muted)' }} onClick={() => setConfirmDelete(false)}>
+            Отмена
+          </button>
+        </div>
+      ) : confirmDelete ? (
         <div className="grid2">
           <button
             className="btn btn-primary"

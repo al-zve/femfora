@@ -164,6 +164,9 @@ h2 { margin: 0; font-size: 18px; font-weight: 800; }
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .grid5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.grid7 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.grid7 .chip { font-size: 14px; padding: 0; }
+.task-meta .rep { display: inline-flex; vertical-align: -1px; }
 
 /* ---------- form ---------- */
 
