@@ -2,6 +2,7 @@ import { db, type Task } from '../db';
 import { addTask } from './actions';
 import { estimateEnergy } from './estimate';
 import { addDays, todayKey } from './dates';
+import { pullTasks, pushTasks } from './gtasks';
 
 /**
  * Google: напоминания и входящие.
@@ -13,7 +14,7 @@ import { addDays, todayKey } from './dates';
 
 type Auth = { access: string; refresh: string; expiresAt: number };
 type TokenResponse = { access_token: string; refresh_token?: string; expires_in?: number };
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(message: string, public status: number) {
     super(message);
   }
@@ -22,7 +23,7 @@ class HttpError extends Error {
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const SCOPES = ['https://www.googleapis.com/auth/calendar.app.created', 'https://www.googleapis.com/auth/tasks'].join(' ');
 const CAL = 'https://www.googleapis.com/calendar/v3';
-const TASKS = 'https://tasks.googleapis.com/tasks/v1';
+export const TASKS = 'https://tasks.googleapis.com/tasks/v1';
 export const INBOX_TITLE = 'FemFora Inbox';
 export const REMIND_MINUTES = 10;
 const EVENT_MINUTES = 30;
@@ -138,7 +139,7 @@ async function accessToken(): Promise<string> {
   return navigator.locks ? navigator.locks.request('google-token', run) : run();
 }
 
-async function gfetch<T>(url: string, init: RequestInit = {}): Promise<T> {
+export async function gfetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   const t = await accessToken();
   const r = await fetch(url, { ...init, headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) } });
   if (r.status === 204) return undefined as T;
@@ -149,7 +150,7 @@ async function gfetch<T>(url: string, init: RequestInit = {}): Promise<T> {
 export async function disconnectGoogle() {
   const a = await getGoogleAuth();
   if (a) await fetch('/api/google/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: a.refresh }) }).catch(() => undefined);
-  await db.settings.bulkDelete(['google_auth', 'google_pending', 'google_error', 'google_cal', 'google_list', 'google_sync', 'google_seen']);
+  await db.settings.bulkDelete(['google_auth', 'google_pending', 'google_error', 'google_cal', 'google_list', 'google_sync', 'google_seen', 'gtask_lists', 'gtask_pull', 'gtask_tombstones']);
 }
 
 /* ---------- напоминания: календарь «FemFora» ---------- */
@@ -301,7 +302,7 @@ export async function syncInbox(): Promise<number> {
 let running: Promise<number> | null = null;
 let again: 'all' | 'reminders' | null = null;
 
-/** reminders — только напоминания (после изменения задач), иначе ещё и входящие */
+/** reminders — после изменения задач: отправить их в Google Tasks и обновить напоминания; all — ещё и забрать изменения из Google */
 export function syncGoogle(what: 'all' | 'reminders' = 'all'): Promise<number> {
   if (running) {
     // задачи поменялись во время синхронизации — повторим один раз после неё
@@ -311,7 +312,11 @@ export function syncGoogle(what: 'all' | 'reminders' = 'all'): Promise<number> {
   running = (async () => {
     if (!(await getGoogleAuth())) return 0;
     let added = 0;
-    if (what === 'all') added = await syncInbox();
+    if (what === 'all') {
+      added += await syncInbox();
+      added += await pullTasks();
+    }
+    await pushTasks();
     await syncReminders();
     await db.settings.put({ key: 'google_sync', value: { at: Date.now() } });
     return added;

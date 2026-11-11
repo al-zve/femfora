@@ -196,8 +196,9 @@ export function SettingsSheet({ theme, onClose, onNotice }: { theme: ThemePref; 
             </div>
             {googleMsg && <span className="error-text">{googleMsg}</span>}
             <span className="caption" style={{ fontWeight: 500, lineHeight: 1.4 }}>
-              Google: задачи со временем попадают в календарь «FemFora» с напоминанием за {REMIND_MINUTES} минут, а задачи из списка «{INBOX_TITLE}» в Google Tasks переезжают
-              сюда. В Google уходят только названия и время задач, данные о здоровье и цикле — никогда.
+              Google: все задачи синхронизируются со списками «FemFora · Работа» и «FemFora · Личное» в Google Tasks в обе стороны, задачи со временем
+              ещё попадают в календарь «FemFora» с напоминанием за {REMIND_MINUTES} минут, а задачи из «{INBOX_TITLE}» переезжают сюда. В Google уходят
+              только названия, даты, время и подзадачи, данные о здоровье и цикле — никогда.
             </span>
             {whoopMsg && <span className="error-text">{whoopMsg}</span>}
           </div>

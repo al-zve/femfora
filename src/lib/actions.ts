@@ -47,7 +47,13 @@ export async function moveTask(task: Task, to: string) {
 }
 
 export async function deleteTask(id: string) {
-  await db.transaction('rw', db.tasks, db.moves, async () => {
+  await db.transaction('rw', db.tasks, db.moves, db.settings, async () => {
+    const t = await db.tasks.get(id);
+    // задача была в Google Tasks — запомним, чтобы удалить её и там при следующей синхронизации
+    if (t?.gTask) {
+      const prev = ((await db.settings.get('gtask_tombstones'))?.value as { id: string; list: string }[] | undefined) ?? [];
+      await db.settings.put({ key: 'gtask_tombstones', value: [...prev, { id: t.gTask.id, list: t.gTask.list }] });
+    }
     await db.tasks.delete(id);
     await db.moves.where('taskId').equals(id).delete();
   });

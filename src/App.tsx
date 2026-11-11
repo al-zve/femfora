@@ -100,8 +100,9 @@ function useGoogleSync(notify: (t: string) => void) {
   const hasPending = !!pending;
   // «отпечаток» того, что влияет на напоминания
   const sig = useLiveQuery(async () => {
-    const ts = await db.tasks.filter((t) => !!t.time).toArray();
-    return ts.map((t) => `${t.id}|${t.title}|${t.date}|${t.time}|${t.done ? 1 : 0}`).sort().join('\n');
+    // любое изменение задачи меняет updatedAt — по нему отправляем изменения в Google Tasks и обновляем напоминания
+    const ts = await db.tasks.toArray();
+    return ts.map((t) => `${t.id}|${t.updatedAt}`).sort().join('\n');
   });
   const lastAll = useRef(0);
 

@@ -32,6 +32,8 @@ export interface Task {
   comments: Comment[];
   createdAt: number;
   updatedAt: number;
+  /** связь с Google Tasks: id задачи и списка, отметка времени Google и когда синхронизировали */
+  gTask?: { id: string; list: string; updated: string; syncedAt: number };
 }
 
 /** след переноса: задача уехала с одного дня на другой */
